@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-fee_schedule-region-coast",
+  "doc_type": "fee_schedule",
+  "placements": [
+    {
+      "fact_ref": "region-coast:coverage_type",
+      "span": [
+        102,
+        120
+      ],
+      "value": "suburban and rural"
+    },
+    {
+      "fact_ref": "region-coast:name",
+      "span": [
+        127,
+        139
+      ],
+      "value": "Coast Region"
+    },
+    {
+      "fact_ref": "fee-early-termination:amount",
+      "span": [
+        178,
+        184
+      ],
+      "value": "150.00"
+    },
+    {
+      "fact_ref": "fee-equipment-rental:amount",
+      "span": [
+        207,
+        212
+      ],
+      "value": "10.00"
+    },
+    {
+      "fact_ref": "fee-installation:amount",
+      "span": [
+        231,
+        236
+      ],
+      "value": "49.99"
+    }
+  ]
+}

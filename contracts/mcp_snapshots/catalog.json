@@ -1,0 +1,66 @@
+[
+  {
+    "description": "Whether a plan can be newly taken: discontinued (legacy) plans cannot.",
+    "name": "check_eligibility",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id"
+      ],
+      "title": "check_eligibilityArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The monthly price for a plan. The catalog decides it in code, the model never does the arithmetic.",
+    "name": "compute_price",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id"
+      ],
+      "title": "compute_priceArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Plan details by id.",
+    "name": "get_plan",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id"
+      ],
+      "title": "get_planArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The plans the provider currently sells.",
+    "name": "list_plans",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "list_plansArguments",
+      "type": "object"
+    }
+  }
+]

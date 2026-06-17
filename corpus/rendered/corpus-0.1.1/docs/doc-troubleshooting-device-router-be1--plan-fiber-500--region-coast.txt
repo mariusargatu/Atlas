@@ -1,0 +1,13 @@
+# Troubleshooting: Router BE1
+
+If your Router BE1 is not connecting properly on the Fiber 500 plan, try
+these steps.
+
+Applies to Fiber 500 at 36.99 per month in the region-coast region.
+
+1. Confirm the device firmware is at version 1.0.1 or later.
+2. Power cycle the Router BE1 for 30 seconds, then reconnect.
+3. Confirm the link light is solid before retrying your connection.
+
+If the issue persists, contact support and reference your Router BE1 firmware
+version 1.0.1.

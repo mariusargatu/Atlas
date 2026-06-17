@@ -1,0 +1,30 @@
+{
+  "doc_id": "doc-device_manual-device-router-be1",
+  "doc_type": "device_manual",
+  "placements": [
+    {
+      "fact_ref": "device-router-be1:name",
+      "span": [
+        2,
+        12
+      ],
+      "value": "Router BE1"
+    },
+    {
+      "fact_ref": "device-router-be1:device_type",
+      "span": [
+        59,
+        65
+      ],
+      "value": "router"
+    },
+    {
+      "fact_ref": "device-router-be1:firmware_version",
+      "span": [
+        84,
+        89
+      ],
+      "value": "1.0.1"
+    }
+  ]
+}

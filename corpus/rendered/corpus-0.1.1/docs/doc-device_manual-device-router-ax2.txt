@@ -1,0 +1,15 @@
+# Router AX2 device manual
+
+Model: Router AX2
+Device type: router
+Firmware version: 1.4.2
+
+## Care and maintenance
+
+Keep the Router AX2 in a well ventilated location away from direct sunlight.
+Do not submerge the device in water.
+
+## Firmware
+
+This manual reflects firmware version 1.4.2. Check for
+updates periodically to keep the Router AX2 compatible with future plans.

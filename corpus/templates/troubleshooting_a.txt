@@ -1,0 +1,13 @@
+# Troubleshooting: {name}
+
+If your {name} is not connecting properly on the {plan_name} plan, try
+these steps.
+
+Applies to {plan_name} at {monthly_price} per month{region_clause}.
+
+1. Confirm the device firmware is at version {firmware_version} or later.
+2. Power cycle the {name} for 30 seconds, then reconnect.
+3. Confirm the link light is solid before retrying your connection.
+
+If the issue persists, contact support and reference your {name} firmware
+version {firmware_version}.

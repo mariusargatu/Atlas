@@ -1,0 +1,352 @@
+# The whole Atlas app: the FastAPI edge, the nginx served SPA, and the local retrieval stack.
+#   docker compose up --build          # replay mode, zero keys, zero egress
+#   ATLAS_MODE=live docker compose up --build   # live, answers anything via host Ollama
+# Open http://localhost:8080.
+#
+# postgres/tei-embed/tei-rerank are DEFAULT services, not profile gated (D36 tier 2 requires
+# `docker compose up` to run the naive variant with real local retrieval out of the box, unlike
+# `neo4j` below which D6 scopes as a comparison arm). tei-embed/tei-rerank pull the HF TEI CPU
+# image, which HuggingFace publishes for amd64 only; on Apple Silicon it runs under Rosetta
+# emulation via `platform: linux/amd64` (verified: the binary starts and serves correctly, no
+# illegal instruction crash). First start downloads ~2-3GB of model weights into the named HF cache
+# volumes below, so it takes minutes; restarts are instant once cached.
+#
+# SP3 task 7 wires the acceptance end to end: backend's ATLAS_RETRIEVER=pgvector (default in this
+# file) constructs the real hybrid adapter behind the knowledge port (atlas_graph.select_retriever);
+# the one shot `rag-init` job loads the committed indexes/ parquet into Postgres before backend ever
+# starts, so the chunks table is never empty on a cold `docker compose up`. No key is needed for any
+# of this -- generation (ATLAS_MODE=live with a real provider) is the only step that ever needs one.
+#
+# Two Rosetta emulation findings from getting this stack healthy locally, both addressed below:
+# (1) Under Rosetta both models transiently peak well above their on disk size during warmup
+#     (~10GB embed, ~4-10GB rerank observed); a Docker Desktop VM with under ~16GB allotted can OOM
+#     kill (exit 137) one of them mid-warmup, which `restart: unless-stopped` then retries. Give the
+#     VM enough headroom (20GB+ recommended) if both keep restarting.
+# (2) Even with enough memory, warmup itself is slow under emulation and asymmetric between the two
+#     services: tei-embed (ONNX Runtime backend) observed ~31 minutes to Ready at the default
+#     --max-batch-tokens (16384); tei-rerank (falls back to the Candle CPU backend, see its own
+#     comment below) was pathological at the same default, 30+ minutes with no crash and refused
+#     connections. Capping tei-rerank's warmup batch fixed it (~1-3 minutes observed); tei-embed is
+#     left at the default (still slow, but it does complete) and given a generous healthcheck
+#     start_period instead, so a cold `docker compose up` reads as progressing, not broken.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    environment:
+      ATLAS_MODE: ${ATLAS_MODE:-replay} # replay | live
+      # The image installs ONLY the `ollama` provider group (backend/Dockerfile). Switching
+      # MODEL_PROVIDER to anthropic/openai here needs that group synced into the image first, else
+      # ATLAS_MODE=live fails fast at startup with the group to install (server.py _require_provider_sdk).
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-ollama}
+      MODEL_ID: ${MODEL_ID:-qwen2.5:7b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # SP4 final fix wave (F2): opt in producer for the ladder's provider_fallback rung, shape
+      # 'provider:model_id' (server.py _fallback_gateway). Empty keeps the rung absent (unchanged
+      # default); a live override needs that provider's SDK group synced into the image, the same
+      # rule MODEL_PROVIDER documents above.
+      ATLAS_FALLBACK_MODEL: ${ATLAS_FALLBACK_MODEL:-}
+      # D36 tier 2 (SP3 task 7): `docker compose up` gives real local retrieval out of the box,
+      # generation is the only step that ever needs a key. ATLAS_RETRIEVER=pgvector picks the real
+      # hybrid adapter (atlas_graph.select_retriever); the in network DSN/URLs below use compose
+      # service names, not the host published ports the live test suite dials from outside.
+      ATLAS_RETRIEVER: ${ATLAS_RETRIEVER:-pgvector}
+      ATLAS_PG_DSN: postgresql://atlas:atlas-dev-password@postgres:5432/atlas
+      # SP6 task 3: passthroughs, parity preserving (the defaults stay the exact in network service
+      # names above, unchanged for a plain `docker compose up`). An operator can override either
+      # before `docker compose up` (e.g. `set -a; source .env.fastlane; set +a`) to point retrieval
+      # at a real external amd64 TEI node instead of waiting out the Rosetta emulation warmup this
+      # file's own header comment documents -- the same fastlane node infra/environments/local/
+      # values.yaml's own `tei.mode: external` already uses for the k3d tier's live checks.
+      ATLAS_TEI_EMBED_URL: ${ATLAS_TEI_EMBED_URL:-http://tei-embed:80}
+      ATLAS_TEI_RERANK_URL: ${ATLAS_TEI_RERANK_URL:-http://tei-rerank:80}
+      ATLAS_INDEX_DIR: /app/indexes/corpus-0.1.1-bge-m3-03f983e0
+      # SP6 tasks 1/3: unset (default) keeps NullTracer, the safe default everywhere (server.py's
+      # own _tracer gate). ATLAS_TRACING=otel opts into the real OTel adapter, exporting over OTLP
+      # to otel-collector below -- only reachable at all with `--profile observability` also up.
+      ATLAS_TRACING: ${ATLAS_TRACING:-}
+      ATLAS_OTEL_ENDPOINT: ${ATLAS_OTEL_ENDPOINT:-http://otel-collector:4318}
+      # SP4 task 2: unset/"inmemory" is the hermetic default (never touched here); "postgres" is
+      # compose's own default, mirroring ATLAS_RETRIEVER's philosophy (real adapters out of the box,
+      # generation is the only step that ever needs a key). thread_id is the session id chat_app.py
+      # already namespaces per customer; durability="sync" (chat_app.py) makes a turn's checkpoint
+      # write complete before the HTTP response returns.
+      ATLAS_CHECKPOINTER: ${ATLAS_CHECKPOINTER:-postgres}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # reach an Ollama daemon on the host
+    ports:
+      - "8000:8000" # also exposed directly for debugging / curl
+    volumes:
+      - ./indexes:/app/indexes:ro # the committed index build (fingerprint.json + chunks.parquet)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tei-embed:
+        condition: service_healthy
+      tei-rerank:
+        condition: service_healthy
+      rag-init:
+        condition: service_completed_successfully # chunks table loaded before the app fingerprint-checks it
+      checkpointer-migrate:
+        condition: service_completed_successfully # checkpoint tables exist before the app's first turn
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # Init job (SP3 task 7): loads the COMMITTED indexes/corpus-0.1.1-bge-m3-03f983e0/chunks.parquet
+  # into Postgres, once, before backend ever starts. Chosen over a backend startup hook so the
+  # served app stays load free (no first request or first boot latency spike, no risk of the web
+  # edge racing a slow load) and so the load has its own visible compose log/exit code instead of
+  # being buried in backend's startup line. Reuses the backend image (already carries rag_tools +
+  # psycopg + pyarrow as main deps, see pyproject.toml) with the CLI's `--load-existing` mode
+  # (rag_tools.ingest.main), which skips the build/embed step entirely and only loads the already
+  # built parquet -- idempotent (`IF NOT EXISTS` schema, `ON CONFLICT DO NOTHING` inserts), so it is
+  # safe to rerun on every `docker compose up`, including against a stack that already has the
+  # table loaded (a reload that changes nothing, not a duplicate).
+  rag-init:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - -m
+      - rag_tools.ingest
+      - --load-existing
+      - /app/indexes/corpus-0.1.1-bge-m3-03f983e0
+      - --postgres-dsn
+      - postgresql://atlas:atlas-dev-password@postgres:5432/atlas
+    volumes:
+      - ./indexes:/app/indexes:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no" # a one shot job, not a long lived service
+
+  # Checkpointer schema migration (SP4 task 2): applies backend/atlas/persistence's one Alembic
+  # migration, whose upgrade() calls the langgraph Postgres checkpointer's OWN setup() (digest rec 3:
+  # never hand mirror langgraph DDL). A SIBLING one shot job, not an extension of rag-init above:
+  # rag-init loads the RAG corpus (a rag_tools.ingest module call), this migrates an unrelated schema
+  # (an alembic CLI invocation) -- conflating the two would mix two single purpose jobs' logs and
+  # exit codes into one, the same reasoning rag-init's own comment gives for not folding into
+  # backend's own startup. Reuses the backend image (alembic is a main dependency, pyproject.toml) and
+  # rag-init's exact restart/dependency shape. Idempotent: AsyncPostgresSaver.setup() tracks its own
+  # migration version, so rerunning `task db:upgrade` (or a fresh `docker compose up`) against an
+  # already migrated database changes nothing, safely.
+  checkpointer-migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    environment:
+      ATLAS_PG_DSN: postgresql://atlas:atlas-dev-password@postgres:5432/atlas
+    command:
+      - uv
+      - run
+      - --no-sync
+      - alembic
+      - -c
+      - backend/atlas/persistence/alembic.ini
+      - upgrade
+      - head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no" # a one shot job, not a long lived service
+
+  # pgvector + tsvector: the hybrid retrieval store (D1, D8). Default service: the compose visitor
+  # path needs real local retrieval, not just the in memory CI adapter.
+  postgres:
+    image: pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0 # pg17, resolved from pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas-dev-password
+      POSTGRES_DB: atlas
+    ports:
+      - "5433:5432" # host 5433: 5432 is commonly taken by another local postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # BGE-M3 embeddings (D7), served by HF TEI CPU. --model-id/--revision pinned from models.lock,
+  # never a floating alias (D26). The named cache volume makes the ~2GB first download persist
+  # across restarts.
+  tei-embed:
+    image: ghcr.io/huggingface/text-embeddings-inference@sha256:ad950d30878eceb72aaf32024d26fa2b1d04a75304fa0b4776b49aa1941fea07 # cpu-1.9, resolved from ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 (newest cpu tag at implementation time)
+    platform: linux/amd64 # HF ships TEI CPU images for amd64 only; Apple Silicon runs it via Rosetta
+    command: ["--model-id", "BAAI/bge-m3", "--revision", "5617a9f61b028005a4858fdac845db406aefb181"]
+    ports:
+      - "8081:80"
+    volumes:
+      - tei-embed-cache:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # Observed on this machine: cold model download ~10 min, then ONNX Runtime warmup under
+      # Rosetta emulation ~31 min (no crash, just slow) even with the VM memory headroom above.
+      # 2700s (45 min) leaves real margin over the ~41 min worst case actually measured, so a
+      # genuinely-progressing cold start never gets misread as broken.
+      start_period: 2700s
+    restart: unless-stopped
+
+  # BGE-reranker-v2-m3 (D7), served by the same TEI CPU image with a different --model-id. This
+  # repo revision has no ONNX export, so TEI falls back to the Candle CPU backend (safetensors);
+  # Candle's warmup batch is sized off --max-batch-tokens, and under Rosetta emulation the default
+  # (16384) made warmup pathological (observed: 30+ minutes, connections refused, no crash) even
+  # though the same image/model-id combo on tei-embed (an ONNX Runtime backend, see above) is slow
+  # but does complete on its own. Capping the warmup workload with a lower --max-batch-tokens fixed
+  # it: observed ~1-3 minutes to Ready with this flag, a two order of magnitude improvement.
+  tei-rerank:
+    image: ghcr.io/huggingface/text-embeddings-inference@sha256:ad950d30878eceb72aaf32024d26fa2b1d04a75304fa0b4776b49aa1941fea07 # cpu-1.9, resolved from ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 (newest cpu tag at implementation time)
+    platform: linux/amd64 # HF ships TEI CPU images for amd64 only; Apple Silicon runs it via Rosetta
+    command: ["--model-id", "BAAI/bge-reranker-v2-m3", "--revision", "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e", "--max-batch-tokens", "4096"]
+    ports:
+      - "8082:80"
+    volumes:
+      - tei-rerank-cache:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # With --max-batch-tokens 4096, warmup measured ~1-3 min once cached. 900s (15 min) leaves
+      # generous margin for a genuinely cold cache (model download + warmup on first ever start).
+      start_period: 900s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # Operator-only graph-RAG database (doc 07's Neo4j lane). Behind the `operator` profile so a plain
+  # `docker compose up` (the replay/E2E lane) NEVER starts it: `docker compose --profile operator up neo4j`.
+  # The hermetic gate uses the in-memory graph adapter instead; this is dev/prod / the operator eval lane.
+  # REPOSITIONED (SP9 task 2): this is the LLM-EXTRACTED comparison arm (SimpleKGPipeline over the
+  # rendered corpus text), not the gold graph. The gold graph is the registry materialized Postgres
+  # recursive-CTE adapter (`atlas.adapters.pg_knowledge_graph.PgKnowledgeGraph`), one Postgres, D1.
+  neo4j:
+    image: neo4j:5.26 # LTS (supported to 2028); or neo4j:2026.01 for filterable vector indexes
+    profiles: ["operator"]
+    environment:
+      NEO4J_AUTH: neo4j/atlas-dev-password
+      NEO4J_PLUGINS: '["apoc"]' # only needed for SimpleKGPipeline entity resolution; native vector index needs no plugin
+    ports:
+      - "7474:7474" # HTTP browser
+      - "7687:7687" # Bolt
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s # JVM + store recovery warmup
+
+  # SP6 task 3 (D13): the redacting OTel collector + Phoenix, behind the `observability` profile so
+  # a plain `docker compose up` NEVER starts either: `docker compose --profile observability up`
+  # (add `ATLAS_TRACING=otel` to actually make the backend export). Config generated from the trace
+  # contract (testing/harness/contract_tools/redaction.py, committed at
+  # infra/observability/otel-collector.yaml, regenerate and assert drift gated by
+  # testing/tests/test_redaction.py); redaction runs once, upstream of both fan out targets (Phoenix
+  # and the raw OTLP file archive), so neither ever sees an unredacted span.
+  # otel/opentelemetry-collector-contrib runs as a fixed non root UID (10001) baked into the image
+  # (found live: a freshly created named volume mounts root owned, 755, which UID 10001 cannot write
+  # into -- the collector fails closed with "permission denied" and restart loops rather than
+  # silently dropping the archive). This one shot job chowns the volume to that exact UID before the
+  # collector ever starts, the same "init job owns a precondition, not the long lived service"
+  # pattern rag-init/checkpointer-migrate/phoenix-db-init already established.
+  otel-archive-init:
+    image: busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028 # 1.37.0
+    profiles: ["observability"]
+    command: ["chown", "-R", "10001:10001", "/var/log/otel"]
+    volumes:
+      - otel-raw-archive:/var/log/otel
+    restart: "no" # a one shot job, not a long lived service
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib@sha256:89107a3a8f4636a396927edf7025bb9614b8da2d92f4cc3f43109e8d115736e2 # 0.135.0
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol-contrib/otel-collector.yaml"]
+    volumes:
+      - ./infra/observability/otel-collector.yaml:/etc/otelcol-contrib/otel-collector.yaml:ro
+      - otel-raw-archive:/var/log/otel # D13's "raw OTLP archived": inspect with
+        # `docker compose exec otel-collector cat /var/log/otel/raw-otlp-archive.jsonl`
+    ports:
+      - "4317:4317" # OTLP gRPC, dialed by anything outside this compose network
+      - "4318:4318" # OTLP HTTP, what ATLAS_OTEL_ENDPOINT above actually dials (in network)
+    depends_on:
+      phoenix:
+        condition: service_started
+      otel-archive-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Phoenix's own storage (SP6 digest question 5): the SAME postgres service every other component
+  # uses, a new "phoenix" database, never SQLite (Phoenix's own default) and never a second Postgres
+  # instance. This one shot init job creates that database if it does not already exist, idempotent
+  # (the same "safe to rerun" discipline rag-init/checkpointer-migrate already hold themselves to),
+  # before Phoenix itself ever starts.
+  phoenix-db-init:
+    image: pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+    profiles: ["observability"]
+    environment:
+      PGPASSWORD: atlas-dev-password
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        psql -h postgres -U atlas -d atlas -tc "SELECT 1 FROM pg_database WHERE datname = 'phoenix'"
+        | grep -q 1 || psql -h postgres -U atlas -d atlas -c "CREATE DATABASE phoenix"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no" # a one shot job, not a long lived service
+
+  phoenix:
+    image: arizephoenix/phoenix@sha256:e90f05fc04d7507a948128ddd701d89ad1816a1b6fcccfb9feebd0f77d5e86a3 # version-19.2.0
+    profiles: ["observability"]
+    environment:
+      PHOENIX_SQL_DATABASE_URL: postgresql://atlas:atlas-dev-password@postgres:5432/phoenix
+    ports:
+      - "6006:6006" # Phoenix's own UI/API; not published on the OTLP ports (otel-collector's own
+                     # exporter dials Phoenix's OTLP receiver in network, never through the host)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      phoenix-db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  neo4j-data:
+  postgres-data:
+  tei-embed-cache:
+  tei-rerank-cache:
+  otel-raw-archive:

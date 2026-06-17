@@ -1,0 +1,20 @@
+{
+  "case_id": "gc-0001",
+  "split": "test",
+  "origin": "authored",
+  "candidate_source": null,
+  "source_trace_id": null,
+  "intent": "troubleshooting",
+  "hop_count": 1,
+  "doc_type": "contract_terms",
+  "adversarial_class": "grounded_not_true",
+  "failure_class": null,
+  "answerable": true,
+  "expected_doc_ids": ["2514487e4633b47b"],
+  "expected_tool_calls": [{ "tool": "knowledge.search_knowledge", "args": {} }],
+  "expected_facts": [{ "fact_id": "contract_term-daniel-2025:contract_months", "value": 12 }],
+  "refusal_class": null,
+  "persona": null,
+  "turns": [{ "user": "Is my plan contract free?" }],
+  "end_state": null
+}

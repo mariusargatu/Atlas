@@ -1,0 +1,54 @@
+{
+  "doc_id": "doc-promo_page-promotion-starter-referral",
+  "doc_type": "promo_page",
+  "placements": [
+    {
+      "fact_ref": "plan-starter-50:name",
+      "span": [
+        2,
+        12
+      ],
+      "value": "Starter 50"
+    },
+    {
+      "fact_ref": "promotion-starter-referral:applies_plan",
+      "span": [
+        212,
+        227
+      ],
+      "value": "plan-starter-50"
+    },
+    {
+      "fact_ref": "promotion-starter-referral:credit_amount",
+      "span": [
+        243,
+        248
+      ],
+      "value": "25.00"
+    },
+    {
+      "fact_ref": "promotion-starter-referral:end_date",
+      "span": [
+        259,
+        269
+      ],
+      "value": "2026-12-31"
+    },
+    {
+      "fact_ref": "promotion-starter-referral:name",
+      "span": [
+        276,
+        302
+      ],
+      "value": "Starter 50 Referral Credit"
+    },
+    {
+      "fact_ref": "promotion-starter-referral:start_date",
+      "span": [
+        315,
+        325
+      ],
+      "value": "2026-01-01"
+    }
+  ]
+}

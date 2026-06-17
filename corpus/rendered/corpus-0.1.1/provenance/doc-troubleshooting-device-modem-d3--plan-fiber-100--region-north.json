@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-troubleshooting-device-modem-d3--plan-fiber-100--region-north",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-modem-d3:name",
+      "span": [
+        19,
+        27
+      ],
+      "value": "Modem D3"
+    },
+    {
+      "fact_ref": "device-modem-d3:firmware_version",
+      "span": [
+        228,
+        233
+      ],
+      "value": "3.2.1"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-north:name",
+      "span": [
+        80,
+        89
+      ],
+      "value": "Fiber 100"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-north:monthly_price",
+      "span": [
+        138,
+        143
+      ],
+      "value": "33.99"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-north:region",
+      "span": [
+        161,
+        173
+      ],
+      "value": "region-north"
+    }
+  ]
+}

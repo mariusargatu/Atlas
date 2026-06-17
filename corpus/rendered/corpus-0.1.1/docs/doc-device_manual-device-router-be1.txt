@@ -1,0 +1,15 @@
+# Router BE1 device manual
+
+Model: Router BE1
+Device type: router
+Firmware version: 1.0.1
+
+## Care and maintenance
+
+Keep the Router BE1 in a well ventilated location away from direct sunlight.
+Do not submerge the device in water.
+
+## Firmware
+
+This manual reflects firmware version 1.0.1. Check for
+updates periodically to keep the Router BE1 compatible with future plans.

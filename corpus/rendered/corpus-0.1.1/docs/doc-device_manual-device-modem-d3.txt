@@ -1,0 +1,15 @@
+# Modem D3 device manual
+
+Model: Modem D3
+Device type: modem
+Firmware version: 3.2.1
+
+## Care and maintenance
+
+Keep the Modem D3 in a well ventilated location away from direct sunlight.
+Do not submerge the device in water.
+
+## Firmware
+
+This manual reflects firmware version 3.2.1. Check for
+updates periodically to keep the Modem D3 compatible with future plans.

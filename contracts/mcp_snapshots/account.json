@@ -1,0 +1,52 @@
+[
+  {
+    "description": "The signed in customer's account summary.",
+    "name": "get_account_summary",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "get_account_summaryArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The signed in customer's current bill.",
+    "name": "get_bill",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "get_billArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The equipment on file for the signed in customer.",
+    "name": "get_equipment",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "get_equipmentArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The signed in customer's data usage this billing month.",
+    "name": "get_usage",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "get_usageArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "The signed in customer's open support tickets.",
+    "name": "list_tickets",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "list_ticketsArguments",
+      "type": "object"
+    }
+  }
+]

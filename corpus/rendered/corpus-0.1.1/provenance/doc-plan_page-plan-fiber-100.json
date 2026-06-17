@@ -1,0 +1,47 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-100",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-100:name",
+      "span": [
+        161,
+        170
+      ],
+      "value": "Fiber 100"
+    },
+    {
+      "fact_ref": "plan-fiber-100:download_mbps",
+      "span": [
+        206,
+        209
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100:upload_mbps",
+      "span": [
+        236,
+        239
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100:monthly_price",
+      "span": [
+        278,
+        283
+      ],
+      "value": "29.99"
+    },
+    {
+      "clause": "No contract. Cancel any time.",
+      "fact_ref": "plan-fiber-100:contract_months",
+      "span": [
+        19,
+        48
+      ],
+      "value": "0"
+    }
+  ]
+}

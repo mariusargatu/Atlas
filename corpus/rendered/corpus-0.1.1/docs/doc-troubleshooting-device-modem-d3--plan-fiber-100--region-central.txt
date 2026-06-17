@@ -1,0 +1,14 @@
+# Modem D3 connectivity troubleshooting guide
+
+Customers using the Modem D3 on the Fiber 100 plan should follow this
+guide if connectivity issues occur.
+
+Applies to Fiber 100 at 31.99 per month in the region-central region.
+
+Step 1: verify firmware version 3.2.1 is installed on the
+Modem D3.
+Step 2: disconnect power for at least 30 seconds, then reconnect.
+Step 3: confirm the connection status indicator shows a stable signal.
+
+Support cases referencing the Modem D3 should include the firmware version,
+3.2.1, for faster resolution.

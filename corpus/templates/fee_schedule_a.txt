@@ -1,0 +1,11 @@
+# {name} fee schedule
+
+{override_line}
+
+## Region record
+
+{fields_dump}
+
+## Base fees
+
+{fee_list}

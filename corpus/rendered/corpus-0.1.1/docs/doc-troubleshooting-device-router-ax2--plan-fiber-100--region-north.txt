@@ -1,0 +1,14 @@
+# Router AX2 connectivity troubleshooting guide
+
+Customers using the Router AX2 on the Fiber 100 plan should follow this
+guide if connectivity issues occur.
+
+Applies to Fiber 100 at 33.99 per month in the region-north region.
+
+Step 1: verify firmware version 1.4.2 is installed on the
+Router AX2.
+Step 2: disconnect power for at least 30 seconds, then reconnect.
+Step 3: confirm the connection status indicator shows a stable signal.
+
+Support cases referencing the Router AX2 should include the firmware version,
+1.4.2, for faster resolution.

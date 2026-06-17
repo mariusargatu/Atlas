@@ -1,0 +1,16 @@
+{
+  "name": "refusal",
+  "span_kind": "CHAIN",
+  "attributes": {
+    "atlas.semconv.version": "0.64b0",
+    "atlas.variant": "graph",
+    "atlas.degradation.mode": "refusal",
+    "atlas.privacy.redaction_policy_version": "726bb9ddc4b174af",
+    "atlas.privacy.synthetic": true,
+    "atlas.privacy.content_captured": false,
+    "atlas.contract.trace_version": "1.3.0",
+    "atlas.contract.dataset_version": "0.1.0",
+    "atlas.contract.manifest_version": "0.1.0",
+    "atlas.contract.sse_version": "0.1.0"
+  }
+}

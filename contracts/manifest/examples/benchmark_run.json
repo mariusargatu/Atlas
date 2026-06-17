@@ -1,0 +1,21 @@
+{
+  "run_id": "run-20260718-0001",
+  "git_sha": "f04318a90c1e2d3b",
+  "prompt_hash": "sha256:aa11bb22cc33dd44",
+  "model_snapshot": {
+    "provider": "anthropic",
+    "model_id": "claude-sonnet-5",
+    "revision": "claude-sonnet-5-20260115"
+  },
+  "request_params": { "temperature": 0, "max_tokens": 1024 },
+  "embedding_model": { "id": "BAAI/bge-m3", "revision": "5617a9f" },
+  "index_build_id": "idx-8c1d77aa",
+  "corpus_version": "corpus-0.1.1",
+  "chunker_config_hash": "chk-77aa8c1d",
+  "retrieval_config": { "hybrid": true, "k": 50, "rerank_to": 5, "reranker": "BAAI/bge-reranker-v2-m3" },
+  "dataset_version": "0.1.0",
+  "judge_id": "groundedness-claude-sonnet-5-20260115-r1",
+  "contract_versions": { "trace": "1.3.0", "dataset": "0.1.0", "manifest": "0.1.0", "sse": "0.1.0" },
+  "taxonomy_version": "0.1.0",
+  "image_digests": ["sha256:2b8f0e6a1c9d4f57"]
+}

@@ -1,0 +1,11 @@
+# {name}
+
+This promotion applies to the {plan_name} plan.
+
+{promo_detail}
+
+{waiver_clause}
+
+## Promotion record
+
+{fields_dump}

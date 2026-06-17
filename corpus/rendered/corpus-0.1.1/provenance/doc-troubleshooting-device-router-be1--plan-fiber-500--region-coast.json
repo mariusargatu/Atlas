@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-troubleshooting-device-router-be1--plan-fiber-500--region-coast",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-router-be1:name",
+      "span": [
+        19,
+        29
+      ],
+      "value": "Router BE1"
+    },
+    {
+      "fact_ref": "device-router-be1:firmware_version",
+      "span": [
+        232,
+        237
+      ],
+      "value": "1.0.1"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:name",
+      "span": [
+        84,
+        93
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:monthly_price",
+      "span": [
+        142,
+        147
+      ],
+      "value": "36.99"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:region",
+      "span": [
+        165,
+        177
+      ],
+      "value": "region-coast"
+    }
+  ]
+}

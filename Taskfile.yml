@@ -1,0 +1,517 @@
+# Atlas, single entrypoint (Task · https://taskfile.dev). The PR lane (`task test`) needs NO keys
+# and NO network. The determinism env is pinned globally so a clone reproduces byte for byte
+# (ADR-007). Run `task --list` to see everything.
+version: '3'
+
+env:
+  TZ: UTC
+  LC_ALL: C
+  PYTHONHASHSEED: '0'
+  OMP_NUM_THREADS: '1'
+  PYTHONPATH: backend:testing/harness:.
+  DEEPEVAL_TELEMETRY_OPT_OUT: 'YES'   # deepeval phones home on every measure(); no lane may egress telemetry
+
+tasks:
+  install:
+    desc: Sync Python dependencies via uv. No keys, no lane gating.
+    cmds:
+      - uv sync
+
+  up:
+    desc: Build and start the app containers (backend + web). No keys needed for replay mode.
+    cmds:
+      - docker compose up --build
+
+  db:upgrade:
+    desc: >-
+      Apply the checkpointer schema migration (SP4 task 2, backend/atlas/persistence) against a
+      running Postgres. Needs `docker compose up postgres` (or the whole stack) reachable at
+      ATLAS_PG_DSN; defaults to compose's host published port if unset. `docker compose up` also
+      runs this itself via the `checkpointer-migrate` one shot service before backend starts. Not
+      the PR lane.
+    cmds:
+      - ATLAS_PG_DSN="${ATLAS_PG_DSN:-postgresql://atlas:atlas-dev-password@localhost:5433/atlas}" uv run alembic -c backend/atlas/persistence/alembic.ini upgrade head
+
+  test:
+    desc: Run the hermetic, deterministic, byte-stable regression suite. No keys, no network. Gates every merge.
+    cmds:
+      - uv run pytest -q
+
+  cov:
+    desc: Run the hermetic suite with coverage (omit list lives in pyproject [tool.coverage]). No keys, no network. Non-gating.
+    cmds:
+      - uv run pytest -q --cov --cov-report=term-missing
+
+  test:live:
+    desc: >-
+      Run the live marked tests against the compose stack. Most need only
+      `docker compose up postgres tei-embed tei-rerank`; the persistence lane
+      (test_persistence_live.py, SP4 task 2) needs the whole stack up (`docker compose up`,
+      ATLAS_CHECKPOINTER=postgres, `task db:upgrade` applied) since it drives the served backend
+      over HTTP and restarts its container mid test. Not the PR lane; `task test` stays hermetic.
+    cmds:
+      - uv run pytest -q -m live
+
+  lint:
+    desc: Run the Python lint gate (ruff check, config in pyproject [tool.ruff]). No keys, no network. Gates every merge.
+    cmds:
+      - uv run ruff check .
+
+  record:
+    desc: Capture new cassettes against live models. Needs API keys and network. Not the PR lane.
+    env:
+      RECORD: '1'
+    cmds:
+      - uv run --all-groups pytest -q
+
+  record-demo:
+    desc: Record then replay a demonstration turn against a live provider (MODEL_PROVIDER in .env; default local Ollama, no key). Not the PR lane.
+    cmds:
+      - uv run --all-groups python testing/harness/recording/record_turn.py
+
+  record-atlas:
+    desc: Record the Atlas cold-open cassette replayed by testing/tests/test_recorded_turns.py. Needs API keys and network. Not the PR lane.
+    cmds:
+      - uv run --all-groups python testing/harness/recording/record_atlas_cassettes.py
+
+  seed-e2e:
+    desc: Regenerate the committed cassettes the Playwright E2E lane replays. No keys needed. Non-gating; run when E2E fixtures change.
+    cmds:
+      - uv run python testing/harness/recording/seed_e2e_cassettes.py
+
+  serve-e2e:
+    desc: Serve the product API against the replayed gateway as the E2E backend. No keys, no live calls.
+    cmds:
+      - uv run uvicorn atlas.server:app --port 8000
+
+  web-test:
+    desc: Run the frontend deterministic gate (codegen drift, lint, typecheck, test, knip, build). No keys needed. Mirrors the web CI job; gating.
+    dir: frontend
+    cmds:
+      - pnpm install --frozen-lockfile
+      - pnpm codegen
+      - git diff --exit-code src/api/generated
+      - pnpm lint
+      - pnpm typecheck
+      - pnpm test
+      - pnpm knip
+      - pnpm build
+
+  eval:
+    desc: Run the multi-trial eval lane with Wilson confidence intervals and append a trend row. No keys (replay). Non-gating; a live nightly run is deferred.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.evalkit
+
+  rageval:
+    desc: Run DeepEval's LLM-judged RAG metrics over the corpus. Needs the rageval group; judge is OpenAI when OPENAI_API_KEY is set, else local Ollama. Non-gating; not the PR lane.
+    dotenv: ['.env']
+    cmds:
+      - uv run --group rageval python -m evals.rageval
+
+  ragset:
+    desc: Generate a synthetic RAG eval set with DeepEval's Synthesizer, frozen to JSONL for human review. Needs the rageval group and Ollama. Non-gating.
+    cmds:
+      - uv run --group rageval python -m evals.ragset
+
+  graph:
+    desc: Run the graph-extraction study, scoring the registry-derived GOLD graph against a fixture standing in for the Neo4j LLM-extracted comparison arm, over the in-memory adapters. No keys, no database needed. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.graphrag
+
+  graph-up:
+    desc: Start the operator Neo4j container (compose profile 'operator') so a live SimpleKGPipeline extraction can run against a real database -- Neo4j is the repositioned LLM-extracted comparison arm (SP9 task 2), not the gold graph (that is PgKnowledgeGraph, over Postgres). No keys needed; the app and E2E lane never start it.
+    cmds:
+      - docker compose --profile operator up -d neo4j
+
+  monitor:
+    desc: Run the production-monitoring trend (call budget and read-surface breach), then sample, scrub PII, and promote a flagged failure to a silver golden row. No keys needed. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.monitor
+
+  mutation:
+    desc: Report the frozen semantic-mutant kill rate over the IR metrics, then hand off to an LLM to generate and promote new survivors. No keys for the deterministic part. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.mutation
+
+  metamorphic:
+    desc: >-
+      Report the three frozen metamorphic families (paraphrase, typo/noise, query perturbation),
+      seeded from the registry's conflict-daniel-contract, and their D32 judge free invariants
+      (rank overlap floor, id based retrieval agreement, registry derived answer equivalence),
+      replayed against the stub retrieval fixture. Then hand off to an LLM to propose new family
+      members to review, freeze, and replay. No keys for the deterministic part. Non-gating. The
+      live lane against the real pgvector/TEI stack is `task test:live` (needs
+      `docker compose up postgres tei-embed tei-rerank`), covering
+      `testing/tests/test_metamorphic_live.py`.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m metamorphic
+
+  corpus-mutation:
+    desc: >-
+      SP8 task 7's live/burst corpus mutation lane (D32): mutate one registry fact on a throwaway
+      registry copy, re render only the affected document, re index it under a scoped, never
+      committed ephemeral corpus_version, then assert the real agent's answer tracks the new
+      (mutated) truth via SP7's reference based answer correctness metric. Genuinely different from
+      `task metamorphic` (same truth, different wording) and unrelated to `task mutation` (semantic
+      IR-metric mutation testing of quality/ir_metrics.py itself; a name collision only). Needs
+      `docker compose up postgres tei-embed tei-rerank` (a real TEI embed call re indexes the
+      affected document) and a provider key in .env (the real agent turn at the end). Not the PR
+      lane; deferred, like SP7's own live measurements. The hermetic pieces (mutation selection,
+      ephemeral corpus_version scoping, answer-tracks-truth assertion logic) are gated by
+      `task test`; the retrieval mechanics reproducer is `task test:live`
+      (`testing/tests/test_corpus_mutation_live.py`).
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m corpus_mutation
+
+  trajectory:
+    desc: Grade the agent trajectory over a replayed atlas_graph run. No keys, no egress. Deterministic; the judged view is `task trajectory-judge`.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.trajectory
+
+  trajectory-judge:
+    desc: Grade the replayed run with DeepEval ToolCorrectness and a replayed TaskCompletion verdict. No keys, no egress (frozen cassette). Non-gating; refresh with `task trajectory-record`.
+    cmds:
+      - uv run --group rageval python -m evals.trajectory --judge
+
+  trajectory-record:
+    desc: Capture live TaskCompletion verdicts (Ollama if running, else OpenAI) over the replayed runs and freeze them to replayable cassettes. Needs the rageval group and a judge (loads .env; the Ollama path needs no key). Run once, then `task trajectory-judge` replays with no egress.
+    dotenv: ['.env']
+    cmds:
+      - uv run --group rageval python -m evals.trajectory --record
+
+  simulation:
+    desc: >-
+      Run the persona simulation lane's deterministic core: the roster and the mind-changer
+      multi turn check, frozen as a fixture (ADR-019). No keys needed. Non-gating; the live
+      cross model pass^k loop is `task simulation:live` (SP10 task 4).
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.simulation
+
+  simulation:live:
+    desc: >-
+      SP10 task 4's Simulator lane driver (`.github/workflows/simulator.yml`, manual dispatch, pre
+      burst stage): drive every persona in the roster (evals.simulation.personas.PERSONAS) through
+      a LIVE, generative, multi turn conversation against the real Atlas graph, k=4 trials each
+      (HLD 7.3's "pass to the k power"), a SEPARATE calibrated evaluator model grading persona
+      adherence (invalidating the episode on drift) and task success (never the same model grading
+      its own persona conversation, SP8's cross model boundary). NEVER GATES (D18): report only.
+      Needs `docker compose up postgres tei-embed tei-rerank rag-init` (real retrieval, no key) --
+      this is NOT an infrastructure free lane -- PLUS BOTH OPENAI_API_KEY and ANTHROPIC_API_KEY (one
+      plays the persona, the other evaluates; either alone fails closed before any call). Not the PR
+      lane; manual/operator only.
+    dotenv: ['.env', '.env.fastlane']
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups python testing/harness/judge/simulator_lane.py
+
+  redteam:
+    desc: Re-verify the poison-corpus invariant, then hand off to DeepTeam for live generation when the redteam group is installed. No keys for the deterministic part. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.redteam
+
+  drift:
+    desc: Diff DECISIONS old-vs-new behind a stable request key. No keys (replay). Non-gating; live shadow re-record is deferred.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.drift
+
+  oracle:
+    desc: Grade inference-truth via two independent derivations instead of a stored column. No keys needed. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.inference_oracle
+
+  judge-live:
+    desc: Run the live judge provisional calibration probe (registry truth agreement + judge vs judge kappa, both PROVISIONAL, neither licenses deployment) against real models, sweeping OpenAI and Anthropic tiers cheapest first. Needs OPENAI_API_KEY and/or ANTHROPIC_API_KEY, and network. Not the PR lane.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups --env-file .env python testing/harness/judge/live_provisional.py
+
+  live-pr:sweep:
+    desc: >-
+      SP10 task 2's Live PR lane driver (`.github/workflows/live-pr.yml`): run the real Atlas graph
+      live (labeling.generate_label_set, reused unchanged) over the 76 case seed set, gate on two
+      deterministic floors (guard interception, SP7 registry anchored answer correctness), and grade
+      the same answers with a cheap judge tier (report only, never gates, D18). Needs
+      `docker compose up postgres tei-embed tei-rerank` (real retrieval against the CURRENT corpus;
+      run `task rag:ingest` first if `corpus/**` changed since the committed index was built), and
+      at least one of OPENAI_API_KEY / ANTHROPIC_API_KEY (the cheap judge tier's own provider key;
+      MODEL_PROVIDER/MODEL_ID select the agent's own live model, .env/.env.fastlane sourced). The
+      contract diff floor is a separate step (`task contracts:diff`), not part of this command.
+      Exits non-zero if a deterministic floor fails; the judge tier's own score never affects the
+      exit code. Not the PR lane itself (this IS the Live PR lane's own live half).
+    dotenv: ['.env', '.env.fastlane']
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups python testing/harness/judge/live_pr_lane.py
+
+  full-sweep:run:
+    desc: >-
+      SP10 task 3's Full sweep lane driver (`.github/workflows/full-sweep.yml`, push to main only):
+      run the real Atlas graph live (labeling.generate_label_set plus judge.live_pr_lane.
+      build_live_agent, both reused unchanged) over the full current 76 case golden set, grade every
+      answer with the calibrated frontier judge tier (D15, the top model per provider family, not
+      the Live PR lane's cheap tier), fold the results into evalkit's own report shape, and append a
+      row to testing/harness/judge/artifacts/full_sweep/trend.jsonl (evalkit's own append only
+      JSONL shape). That file is NOT committed to the repo: the workflow uploads it as a per run
+      workflow artifact only, so trend rows do not accumulate across runs unless a maintainer
+      manually commits them back, a step this lane does not perform. Needs `docker compose up
+      postgres tei-embed tei-rerank` (real retrieval against
+      the CURRENT corpus) and at least one of OPENAI_API_KEY / ANTHROPIC_API_KEY (the frontier judge
+      tier's own provider key; MODEL_PROVIDER/MODEL_ID select the agent's own live model, .env/
+      .env.fastlane sourced). NEVER GATES (D18): the exit code reflects a real script error only,
+      never any rate in the report.
+    dotenv: ['.env', '.env.fastlane']
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups python testing/harness/judge/full_sweep.py
+
+  label:generate:
+    desc: >-
+      Generate label items for the HITL adjudication page (SP8 task 4, label collection half).
+      Hermetic replay path: keyless, no network, reproduces the committed fixture
+      (testing/harness/dataset_tools/label_items.fixture.jsonl) byte for byte. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m labeling --source fixture
+
+  label:generate-live:
+    desc: >-
+      Generate the REAL label set (as many items as SP7's seed set currently holds) against a
+      running compose stack (keyless retrieval, slow under Rosetta but fine for a one time batch)
+      plus a real generation provider (keys in .env). Needs `docker compose up` and MODEL_PROVIDER
+      configured. Not the PR lane.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups --env-file .env python -m labeling --mode record --retriever pgvector --seed-cases testing/harness/dataset_tools/seed_cases.jsonl --cassette-dir var/labels/cassettes --out var/labels/label_items.real.jsonl
+
+  benchmark:
+    desc: Run the paired benchmark study with confidence intervals and a significance test over a fixed seed. No keys needed, fully reproducible. Non-gating.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.benchmark
+
+  matrix:live:
+    desc: >-
+      SP9 task 4's deferred live caller + SP10's benchmark CLI entrypoint: run the staged matrix
+      (embedders -> rerankers -> generators, plus the naive/agentic/graph variant comparison)
+      against REAL TEI/OpenAI/Anthropic/Ollama/Postgres (testing/harness/matrix/live_driver.py +
+      __main__.py). Needs `docker compose up postgres tei-embed tei-rerank` (or .env.fastlane's own
+      amd64 node) healthy, ATLAS_PG_DSN/ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL set, provider keys
+      in .env (OPENAI_API_KEY/ANTHROPIC_API_KEY), and Ollama running locally for the free axis --
+      every required var fails closed with a worded message before any live call if missing. The
+      text-embedding-3-small embedder axis additionally needs ATLAS_OPENAI_INDEX_DIR (no committed
+      default: no index build embedded via OpenAI ships with this repo yet, see live_driver.py's
+      own module docstring); omit it from --embedders (--embedders bge-m3) until one exists. Spend
+      ceilings: $20 OpenAI / $10 Anthropic / $0 Ollama (matrix.spend_gate.CEILINGS_USD, overridable
+      via --openai-ceiling/--anthropic-ceiling), and dropped_cells / a refused variant stage are
+      both printed after the run, never silent. Writes a manifest plus per query result files under
+      var/matrix/<run-id>/ (gitignored, never a committed artifact). Sources .env + .env.fastlane
+      (the TEI URL overrides for the amd64 fastlane node). OPERATOR/BURST step, never the PR lane:
+      `task test` never makes this file's own live call -- only its assembly/wiring is hermetically
+      tested, keylessly (testing/tests/test_matrix_live_driver.py, test_matrix_live_search.py,
+      test_matrix_main.py); `__main__.py` itself is omitted from coverage (pyproject.toml), matching
+      every other operator entrypoint script in this repo. Pass extra flags after `--`, e.g.
+      `task matrix:live -- --limit-cases 5 --generators ollama --variant-generator none` for a cheap
+      smoke run.
+    dotenv: ['.env', '.env.fastlane']
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run --all-groups python -m matrix {{.CLI_ARGS}}
+
+  load:k6:
+    desc: >-
+      SP9 task 6 (D31): k6 + xk6-sse load lane against a real /chat/stream endpoint, stepped
+      concurrency 1-32 VUs, TTFT/tokens per sec/e2e/goodput Trend metrics with thresholds as code
+      (testing/harness/load/thresholds.json). BURST TIER ONLY (D3/7.1: never quote local numbers
+      for a saturation knee) -- point ATLAS_BASE_URL at the recreated Hetzner burst tier's own
+      ingress, never localhost. Needs a k6 binary built with the xk6-sse extension
+      (github.com/phymbert/xk6-sse -- CORRECTED here, SP10 task 5: the extension lives under its
+      author's own account, never under github.com/grafana; see burst-benchmark.yml's own header for
+      the verified release used to build it) on PATH; the stock k6 binary has no k6/x/sse module
+      unless built with it (or resolved automatically by a k6 release new enough to carry Automatic
+      Extension Resolution AND the extension is already marked a community extension; this repo
+      still builds its own pinned binary via xk6 rather than depend on that resolving the same way
+      on every runner). Not the PR lane; live/burst only, deferred. This task builds and hermetically
+      tests only the pure
+      helpers the script calls (testing/harness/load/thresholds.py, prompt_corpus.py,
+      phoenix_join.py) -- task test gates those; this target itself is not gated.
+    cmds:
+      - k6 run testing/harness/load/k6/chat_sse_load.js
+
+  load:join:
+    desc: >-
+      The Phoenix join, run after the k6 run (SP9 task 6): reads a k6 stdout capture (LOAD_ITER
+      lines) plus a Phoenix span export (a local JSON file, already in phoenix_join.SpanRecord's
+      own shape -- turning a real live Phoenix export into that shape is a documented, live burst
+      wiring step this task does not build), joins them via atlas.turn.seq (SP6's fix wave), and
+      prints latency by stage and by concurrency step. The join mechanism itself IS hermetically gated
+      (task test, testing/harness/load/phoenix_join.py); only the live inputs and this CLI's own
+      wiring are not. Pass ITERATIONS=<path> SPANS=<path>.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m load --iterations {{.ITERATIONS}} --spans {{.SPANS}}
+
+  contracts:diff:
+    desc: Diff every contract schema against a git ref (default main). No keys, no network.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m contract_tools.diff --git-ref {{.REF | default "main"}} --all-families
+
+  contracts:changelog-gate:
+    desc: >-
+      Full CHANGELOG gate (SP6 task 6, D37): fails if any contracts/*/schema.json changed since
+      --ref (default main) with no CHANGELOG.md change in the same diff, then re runs the hermetic
+      file consistency check (CHANGELOG.md's recorded ```contract-versions block must equal
+      contract_tools.loader.contract_versions()). Needs a real git history to diff against, so this
+      is NOT part of `task test` (the hermetic lane never walks git history): `task test` instead
+      runs only the file consistency half, via testing/tests/test_changelog_gate.py. The push
+      activated CI workflow (.github/workflows/release.yml) runs this same target on every push.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m contract_tools.changelog_gate --git-ref {{.REF | default "main"}}
+
+  corpus:build:
+    desc: Compile the fact registry, render, verify, and emit the versioned corpus (docs, provenance, manifest). No keys, no network.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m corpus_tools.build --version corpus-0.1.1
+
+  dataset:build:
+    desc: >-
+      Walk the registry into mechanically derivable cases (dataset_tools.generator), assign
+      deterministic seeded stratified dev/test splits (case class plus intent), and emit
+      dataset_manifest.json: a content addressed case list, per split/slice counts, and both
+      directions of the contamination lint (verbatim case text leaking an undeclared rendered doc
+      hard fails; dev/test fact coverage overlap is measured and declared in the manifest, never
+      silent). No keys, no network. Pass CASES=<path.jsonl> to build over an already written case
+      set (e.g. a hand curated seed set) instead of regenerating from the registry.
+    cmds:
+      - >-
+        PYTHONPATH=backend:testing/harness:. uv run python -m dataset_tools.manifest
+        {{if .CASES}}--cases {{.CASES}}{{end}}
+        --cases-out testing/harness/dataset_tools/dataset_cases.jsonl
+        --manifest-out testing/harness/dataset_tools/dataset_manifest.json
+
+  rag:ingest:
+    desc: Build the corpus-0.1.1 retrieval index against the compose TEI embedder and load it into Postgres. Needs `docker compose up postgres tei-embed`. Not the PR lane.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m rag_tools.ingest --corpus-version corpus-0.1.1
+
+  rag:smoke:
+    desc: >-
+      D36 tier 2 compose acceptance: ask the Daniel question through the real served backend, real
+      retrieval always (no key), real generation only if .env has a provider key (tiny max_tokens).
+      Prints which half ran and the retrieved doc ids. Needs `docker compose up` healthy. Not the PR lane.
+    dotenv: ['.env']
+    cmds:
+      # `record` group: langchain-anthropic/langchain-openai, only needed for the generation half's
+      # live provider call. The retrieval half needs neither (httpx/psycopg are main dependencies).
+      - PYTHONPATH=backend:testing/harness:. uv run --group record python -m rag_tools.smoke
+
+  infra:render:
+    desc: >-
+      Render every currently defined infra/ release for both environments (local, burst) with zero
+      cluster and zero credentials (helmfile template). Defaults SOPS_AGE_KEY_FILE to the documented
+      ~/.config/atlas-age/keys.txt (infra/README.md) so the SOPS mechanism decrypts without extra
+      setup; an operator's own SOPS_AGE_KEY_FILE, if already exported, wins. Sources .env.fastlane
+      (repo root, gitignored) for ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL, the local tier's external
+      TEI endpoint (Task 3); the precondition below is the actual fail closed gate with a worded
+      message naming that file, since helmfile's own `ref+envsubst://` value resolution is
+      deliberately permissive (an unset variable silently becomes an empty string, not an error).
+      Mirrors what testing/tests/test_infra_manifests.py asserts; not the PR lane by itself (that
+      test is).
+    dir: infra
+    dotenv: ['../.env.fastlane']
+    env:
+      SOPS_AGE_KEY_FILE:
+        sh: echo "${SOPS_AGE_KEY_FILE:-$HOME/.config/atlas-age/keys.txt}"
+    preconditions:
+      - sh: '[ -n "${ATLAS_TEI_EMBED_URL:-}" ] && [ -n "${ATLAS_TEI_RERANK_URL:-}" ]'
+        msg: "ATLAS_TEI_EMBED_URL and ATLAS_TEI_RERANK_URL must both be set: create .env.fastlane at the repo root (gitignored, never committed) with both variables set to a reachable amd64 TEI endpoint's base URL. See infra/README.md's k3d tier section."
+    cmds:
+      - helmfile -e local template
+      - helmfile -e burst template
+
+  k3d:up:
+    desc: >-
+      SP5 task 2 phase 1, extended by tasks 3 and 4: create the "atlas" k3d cluster with a local
+      registry, the indexes/ hostPath mount, and the ingress port mapping (http://localhost:8090),
+      build and push the pgvector/backend/web images, install the CNPG operator, bring up the
+      pgvector Cluster (D1: instances=1), apply the indexes/ PersistentVolume/PersistentVolumeClaim
+      pair, apply the tei releases in local's external endpoint mode (connectivity check Jobs
+      against the .env.fastlane endpoints; no in cluster TEI Deployments on the local tier, see
+      infra/README.md), run the checkpointer-migrate/rag-init one shot Jobs, and deploy the backend/web
+      Deployments plus the Traefik IngressRoute and D35 rate limit Middleware. Real docker builds, a
+      real operator pull, and a real (if cached after the first run) TEI model download: minutes, not
+      seconds, on a cold run; up to the documented warmup allowance (2700s embed / 900s rerank) on a
+      cold TEI cache. A cluster created before task 4 needs one `task k3d:down` then `task k3d:up`
+      cycle to pick up the ingress port mapping. Needs Docker, k3d, kubectl, helm, helmfile, sops, age
+      on PATH (infra/README.md's Prerequisites section). Local only; never touches the compose stack.
+      Not the PR lane.
+    cmds:
+      - infra/scripts/k3d-up.sh
+
+  k3d:verify:
+    desc: >-
+      Live verification against an already up k3d tier (`task k3d:up`): the rag corpus loaded (45
+      rows in chunks), the checkpointer schema present (the four langgraph-checkpoint-postgres
+      tables), via `kubectl exec` + psql against the CNPG pod, (SP5 task 3) the external TEI
+      endpoints' live /info revisions matching models.lock (local runs tei.mode external, so no in
+      cluster TEI Deployment exists to be Available), and (SP5 task 4) the
+      backend/web Deployments Available plus an HTTP 200 through the ingress. Not the PR lane.
+    cmds:
+      - infra/scripts/k3d-verify.sh
+
+  k3d:down:
+    desc: >-
+      Delete the local "atlas" k3d cluster (and its registry). Does not touch the compose stack or
+      any other k3d cluster on this machine. Not the PR lane.
+    cmds:
+      - k3d cluster delete atlas
+
+  k3d:smoke:
+    desc: >-
+      SP5 task 4: the rag smoke, ported to the k3d tier and run against the real Traefik ingress
+      (http://localhost:8090 by default) rather than a directly published backend port. Retrieval
+      half always runs (no key needed; opens a temporary kubectl port-forward to CNPG's atlas-pg-rw
+      Service, torn down on exit), chat endpoint/stream halves always attempted through the ingress
+      (an EXPECTED 503 cassette miss with no committed cassette for this fresh question, same as
+      compose's own task rag:smoke), generation half only if a provider key is present in .env
+      (sourced by this target the same way task rag:smoke sources it, never read by the script
+      itself). Needs `task k3d:up` already healthy. Not the PR lane.
+    dotenv: ['.env']
+    cmds:
+      - infra/scripts/k3d-smoke.sh
+
+  burst:up:
+    desc: >-
+      SP5 task 5: bring the Hetzner burst tier up (D3: OpenTofu + kube-hetzner, one CX23 control
+      plane, two CX33 workers, then the SAME helmfile the k3d tier already runs). Complete code
+      behind two fail closed gates, the credential check (HCLOUD_TOKEN, R2 keys, the burst
+      domain/ACME contact, an SSH public key) and the unbuilt indexes restore stop, both worded,
+      both firing BEFORE any tofu/hcloud/helmfile command -- proven with credentials explicitly unset in
+      infra/scripts/burst-up.sh's own development record. Creates real, billed Hetzner resources.
+      Local operator only, PLUS (SP10 task 5) the burst-benchmark protected environment CI lane
+      (.github/workflows/burst-benchmark.yml, workflow_dispatch, environment: burst-benchmark) --
+      that lane's own required reviewers are the human gate before this ever runs, mirroring the same
+      "credential gate before any real command" discipline this script already holds itself to, never
+      an unattended cron. Not the PR lane.
+    cmds:
+      - infra/scripts/burst-up.sh
+
+  burst:destroy:
+    desc: >-
+      SP5 task 5: tear the Hetzner burst tier down completely (D3: "destroy.sh with orphan review").
+      Same credential gate as `task burst:up`. "always() discipline scripted": backs the wildcard TLS
+      secret up to R2, then runs `tofu destroy`, then the shared label based orphan check
+      (infra/scripts/hcloud-orphans.sh, also .github/workflows/janitor.yml's own weekly check) --
+      every step attempted regardless of an earlier one's own failure, the final exit code reflecting
+      `tofu destroy` itself. Idempotent: safe to rerun against a partially torn down state. Local
+      operator only, PLUS (SP10 task 5) burst-benchmark.yml's own `if: always()` teardown step, the
+      SAME reason this script's own discipline exists: whatever failed earlier in that job (`task
+      burst:up` itself, the sentinel gate, the matrix, the load lane), this still runs. Not the PR lane.
+    cmds:
+      - infra/scripts/burst-destroy.sh
+
+  sentinel:gate:
+    desc: >-
+      SP10 task 5's sentinel go or no go gate (D29/D41, HLD section 7.3's Burst benchmark row): one
+      synchronous invocation of testing/harness/sentinel/probe.py's existing known-answer/
+      known-refusal/known-injection queries (sentinel.ci_gate, thin CI wiring that REUSES
+      sentinel.probe.run_probe unchanged, never a second copy) against ATLAS_PROBE_BASE_URL, HARD
+      FAILING before any paid step (task matrix:live, task load:k6/load:join) on a single red class,
+      never averaged, never partially admitted. Deliberately never pushes to the Pushgateway (the in
+      cluster ClusterIP Service the deployed CronJob, SP6 task 5, already owns as its one writer);
+      this is the burst-benchmark CI lane's own preflight, reported to the job log only. No provider
+      keys needed (a real session token comes from ATLAS_PROBE_BASE_URL's own /auth/login); needs a
+      reachable endpoint (burst-benchmark.yml opens a kubectl port-forward to the in cluster backend
+      Service first), so not the PR lane.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m sentinel.ci_gate

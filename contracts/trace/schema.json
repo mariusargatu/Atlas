@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.contracts/trace/1.3.0",
+  "x-contract-version": "1.3.0",
+  "title": "Atlas trace contract: one exported span",
+  "type": "object",
+  "required": ["name", "span_kind", "attributes"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string" },
+    "span_kind": {
+      "enum": ["CHAIN", "RETRIEVER", "RERANKER", "LLM", "TOOL", "GUARDRAIL", "EVALUATOR"]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "attributes": { "type": "object" }
+        },
+        "if": { "properties": { "name": { "const": "user_feedback" } } },
+        "then": {
+          "properties": {
+            "attributes": {
+              "type": "object",
+              "required": ["label"],
+              "properties": {
+                "label": { "enum": ["thumbs_up", "thumbs_down"] },
+                "comment": { "type": "string" }
+              }
+            }
+          },
+          "required": ["attributes"]
+        }
+      }
+    },
+    "attributes": {
+      "type": "object",
+      "required": ["atlas.contract.trace_version", "atlas.privacy.synthetic"],
+      "additionalProperties": true,
+      "properties": {
+        "atlas.semconv.version": { "type": "string" },
+        "atlas.variant": { "enum": ["naive", "agentic", "graph"] },
+        "atlas.config.hash": { "type": "string" },
+        "atlas.corpus.version": { "type": "string" },
+        "atlas.index.build_id": { "type": "string" },
+        "atlas.stage.embed_ms": { "type": "number" },
+        "atlas.stage.retrieve_ms": { "type": "number" },
+        "atlas.stage.rerank_ms": { "type": "number" },
+        "atlas.stage.assemble_ms": { "type": "number" },
+        "atlas.stage.ttft_ms": { "type": "number" },
+        "atlas.degradation.mode": {
+          "enum": ["none", "retry", "provider_fallback", "drop_rerank", "lexical_only", "refusal"]
+        },
+        "atlas.retrieval.doc_ids": { "type": "array", "items": { "type": "string" } },
+        "atlas.rerank.scores_pre": { "type": "array", "items": { "type": "number" } },
+        "atlas.rerank.scores_post": { "type": "array", "items": { "type": "number" } },
+        "atlas.guard.decision": { "enum": ["allow", "block", "step_up"] },
+        "atlas.judge.id": { "type": "string" },
+        "atlas.judge.verdict": { "enum": ["grounded", "ungrounded"] },
+        "atlas.judge.rubric_version": { "type": "string" },
+        "atlas.cost.input_tokens": { "type": "integer" },
+        "atlas.cost.output_tokens": { "type": "integer" },
+        "atlas.cost.usd": { "type": "number" },
+        "atlas.subject.pseudonym": { "type": "string" },
+        "atlas.privacy.redaction_policy_version": { "type": "string" },
+        "atlas.privacy.synthetic": { "type": "boolean" },
+        "atlas.privacy.content_captured": { "type": "boolean" },
+        "atlas.contract.trace_version": { "type": "string" },
+        "atlas.contract.dataset_version": { "type": "string" },
+        "atlas.contract.manifest_version": { "type": "string" },
+        "atlas.contract.sse_version": { "type": "string" },
+        "atlas.turn.seq": { "type": "string" }
+      }
+    }
+  }
+}

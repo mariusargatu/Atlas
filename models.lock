@@ -1,0 +1,46 @@
+{
+  "embedding": [
+    {
+      "provider": "local-tei",
+      "model_id": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "dim": 1024,
+      "normalize": true,
+      "query_prefix": "",
+      "document_prefix": ""
+    },
+    {
+      "provider": "openai",
+      "model_id": "text-embedding-3-small",
+      "revision": "text-embedding-3-small",
+      "dim": 1536,
+      "normalize": true,
+      "query_prefix": "",
+      "document_prefix": ""
+    }
+  ],
+  "reranker": [
+    {
+      "provider": "local-tei",
+      "model_id": "BAAI/bge-reranker-v2-m3",
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    }
+  ],
+  "generator": [
+    {
+      "provider": "anthropic",
+      "model_id": "claude-sonnet-5",
+      "revision": "claude-sonnet-5"
+    },
+    {
+      "provider": "openai",
+      "model_id": "gpt-5.6-sol",
+      "revision": "gpt-5.6-sol"
+    },
+    {
+      "provider": "ollama",
+      "model_id": "qwen2.5:7b",
+      "revision": "qwen2.5:7b"
+    }
+  ]
+}

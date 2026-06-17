@@ -1,0 +1,13 @@
+# Troubleshooting: Router AX2
+
+If your Router AX2 is not connecting properly on the Fiber 500 plan, try
+these steps.
+
+Applies to Fiber 500 at 39.99 per month.
+
+1. Confirm the device firmware is at version 1.4.2 or later.
+2. Power cycle the Router AX2 for 30 seconds, then reconnect.
+3. Confirm the link light is solid before retrying your connection.
+
+If the issue persists, contact support and reference your Router AX2 firmware
+version 1.4.2.

@@ -1,0 +1,55 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-500--region-coast",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-500--region-coast:name",
+      "span": [
+        161,
+        170
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:download_mbps",
+      "span": [
+        206,
+        209
+      ],
+      "value": "500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:upload_mbps",
+      "span": [
+        236,
+        239
+      ],
+      "value": "500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:monthly_price",
+      "span": [
+        278,
+        283
+      ],
+      "value": "36.99"
+    },
+    {
+      "clause": "No contract. Cancel any time.",
+      "fact_ref": "plan-fiber-500--region-coast:contract_months",
+      "span": [
+        19,
+        48
+      ],
+      "value": "0"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-coast:region",
+      "span": [
+        301,
+        313
+      ],
+      "value": "region-coast"
+    }
+  ]
+}

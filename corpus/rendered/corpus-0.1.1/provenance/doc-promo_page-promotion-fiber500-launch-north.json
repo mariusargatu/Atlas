@@ -1,0 +1,70 @@
+{
+  "doc_id": "doc-promo_page-promotion-fiber500-launch-north",
+  "doc_type": "promo_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-500:name",
+      "span": [
+        2,
+        11
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:applies_plan",
+      "span": [
+        189,
+        203
+      ],
+      "value": "plan-fiber-500"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:end_date",
+      "span": [
+        214,
+        224
+      ],
+      "value": "2026-03-31"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:equipment_rental_waived",
+      "span": [
+        250,
+        254
+      ],
+      "value": "true"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:name",
+      "span": [
+        261,
+        289
+      ],
+      "value": "Fiber 500 North Launch Promo"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:promo_monthly_price",
+      "span": [
+        311,
+        316
+      ],
+      "value": "29.99"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:region",
+      "span": [
+        325,
+        337
+      ],
+      "value": "region-north"
+    },
+    {
+      "fact_ref": "promotion-fiber500-launch-north:start_date",
+      "span": [
+        350,
+        360
+      ],
+      "value": "2026-01-01"
+    }
+  ]
+}

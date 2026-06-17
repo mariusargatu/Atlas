@@ -1,0 +1,283 @@
+# The hand authored narrative core of the fact registry (HLD D4).
+#
+# This is the root artifact: documents, golden answers, and the knowledge graph all derive
+# from these entities, edges, and contradictions. Nothing here is generated.
+#
+# Field values are quoted strings by convention (entity_fields stores text), with one
+# deliberate exception: `contract_months` is an int everywhere it appears, because the
+# registry loader's own test suite (testing/tests/test_corpus_registry.py) asserts
+# `fields["contract_months"] == 12`, not `== "12"`. The loader does not coerce field types,
+# so the YAML literal's type is the fields-dict type; the test is the source of truth here
+# and wins over the general string-fields convention.
+#
+# The flagship scenario: Daniel signed contract_term-daniel-2025 while on plan-fiber-100-legacy
+# (a 12 month contract, 2025 vintage). The CURRENT plan-fiber-100 marketing page has since
+# dropped the contract requirement (contract_months: 0). contract_term-daniel-2025 supersedes
+# plan-fiber-100, and conflict-daniel-contract is the typed contradiction record that makes
+# "is my plan contract free" deterministically gradeable: the customer's contract wins, the
+# current page loses.
+
+entities:
+  # --- plans ---
+  - id: plan-fiber-500
+    kind: plan
+    render: true
+    fields:
+      name: "Fiber 500"
+      monthly_price: "39.99"
+      download_mbps: "500"
+      upload_mbps: "500"
+      technology: "fiber"
+      contract_months: 0
+
+  - id: plan-fiber-100
+    kind: plan
+    render: true
+    fields:
+      name: "Fiber 100"
+      monthly_price: "29.99"
+      download_mbps: "100"
+      upload_mbps: "100"
+      technology: "fiber"
+      contract_months: 0
+      page_status: "current"
+
+  - id: plan-fiber-100-legacy
+    kind: plan
+    render: true
+    fields:
+      name: "Fiber 100 Legacy"
+      monthly_price: "24.99"
+      download_mbps: "100"
+      upload_mbps: "100"
+      technology: "fiber"
+      contract_months: 12
+      vintage_year: "2025"
+      page_status: "superseded"
+
+  - id: plan-starter-50
+    kind: plan
+    render: true
+    fields:
+      name: "Starter 50"
+      monthly_price: "19.99"
+      download_mbps: "50"
+      upload_mbps: "50"
+      technology: "fiber"
+      contract_months: 0
+
+  # --- regions ---
+  - id: region-north
+    kind: region
+    render: true
+    fields:
+      name: "North Region"
+      coverage_type: "urban and suburban"
+      equipment_rental_override_amount: "5.00"
+
+  - id: region-central
+    kind: region
+    render: true
+    fields:
+      name: "Central Region"
+      coverage_type: "urban"
+
+  - id: region-coast
+    kind: region
+    render: true
+    fields:
+      name: "Coast Region"
+      coverage_type: "suburban and rural"
+
+  # --- fees ---
+  - id: fee-installation
+    kind: fee
+    render: true
+    fields:
+      name: "Installation Fee"
+      amount: "49.99"
+      billing_type: "one_time"
+
+  - id: fee-equipment-rental
+    kind: fee
+    render: true
+    fields:
+      name: "Equipment Rental Fee"
+      amount: "10.00"
+      billing_type: "monthly"
+
+  - id: fee-early-termination
+    kind: fee
+    render: true
+    fields:
+      name: "Early Termination Fee"
+      amount: "150.00"
+      billing_type: "one_time"
+
+  # --- devices ---
+  - id: device-router-ax2
+    kind: device
+    render: true
+    fields:
+      name: "Router AX2"
+      device_type: "router"
+      wifi_standard: "wifi6"
+      firmware_version: "1.4.2"
+
+  - id: device-router-be1
+    kind: device
+    render: true
+    fields:
+      name: "Router BE1"
+      device_type: "router"
+      wifi_standard: "wifi7"
+      firmware_version: "1.0.1"
+
+  - id: device-modem-d3
+    kind: device
+    render: true
+    fields:
+      name: "Modem D3"
+      device_type: "modem"
+      docsis_version: "3.1"
+      firmware_version: "3.2.1"
+
+  # --- contract terms ---
+  - id: contract_term-daniel-2025
+    kind: contract_term
+    render: true
+    fields:
+      name: "Daniel's 2025 Contract Term"
+      customer_name: "Daniel"
+      plan_id: "plan-fiber-100-legacy"
+      contract_months: 12
+      vintage_year: "2025"
+      grandfathered: "true"
+
+  - id: contract_term-sarah-2024
+    kind: contract_term
+    render: true
+    fields:
+      name: "Sarah's 2024 Contract Term"
+      customer_name: "Sarah"
+      plan_id: "plan-fiber-500"
+      contract_months: 24
+      vintage_year: "2024"
+      grandfathered: "false"
+
+  # --- promotions ---
+  - id: promotion-fiber500-launch-north
+    kind: promotion
+    render: true
+    fields:
+      name: "Fiber 500 North Launch Promo"
+      applies_plan: "plan-fiber-500"
+      region: "region-north"
+      promo_monthly_price: "29.99"
+      equipment_rental_waived: "true"
+      start_date: "2026-01-01"
+      end_date: "2026-03-31"
+
+  - id: promotion-starter-referral
+    kind: promotion
+    render: true
+    fields:
+      name: "Starter 50 Referral Credit"
+      applies_plan: "plan-starter-50"
+      credit_amount: "25.00"
+      start_date: "2026-01-01"
+      end_date: "2026-12-31"
+
+  # --- policies ---
+  - id: policy-fair-use
+    kind: policy
+    render: true
+    fields:
+      name: "Fair Use Policy"
+      threshold_gb: "1200"
+      throttle_mbps: "10"
+
+  - id: policy-outage-credits
+    kind: policy
+    render: true
+    fields:
+      name: "Outage Credit Policy"
+      credit_per_hour: "5.00"
+      max_monthly_credit: "50.00"
+
+  # --- never rendered pool: must exist in the registry (for graph/data completeness), must
+  # --- never surface in a customer facing document. render: false is the only enforcement point.
+  - id: plan-quantum-5g
+    kind: plan
+    render: false
+    fields:
+      name: "Quantum 5G"
+      monthly_price: "79.99"
+      download_mbps: "900"
+      upload_mbps: "100"
+      technology: "fixed_wireless_5g"
+      contract_months: 24
+      launch_status: "not_yet_released"
+
+  - id: fee-teleport-setup
+    kind: fee
+    render: false
+    fields:
+      name: "Teleport Setup Fee"
+      amount: "0.00"
+      billing_type: "one_time"
+      note: "internal test fixture, must never render to a customer facing document"
+
+edges:
+  # every rendered plan is available_in at least two regions
+  - { relation: available_in, src: plan-fiber-500, dst: region-north }
+  - { relation: available_in, src: plan-fiber-500, dst: region-central }
+  - { relation: available_in, src: plan-fiber-500, dst: region-coast }
+  - { relation: available_in, src: plan-fiber-100, dst: region-north }
+  - { relation: available_in, src: plan-fiber-100, dst: region-central }
+  - { relation: available_in, src: plan-fiber-100-legacy, dst: region-north }
+  - { relation: available_in, src: plan-fiber-100-legacy, dst: region-central }
+  - { relation: available_in, src: plan-starter-50, dst: region-central }
+  - { relation: available_in, src: plan-starter-50, dst: region-coast }
+
+  # promotions applies_to plans
+  - { relation: applies_to, src: promotion-fiber500-launch-north, dst: plan-fiber-500 }
+  - { relation: applies_to, src: promotion-starter-referral, dst: plan-starter-50 }
+
+  # region north overrides_fee equipment_rental
+  - relation: overrides_fee
+    src: region-north
+    dst: fee-equipment-rental
+    fields:
+      override_amount: "5.00"
+      reason: "regional promotional credit, not a full waiver"
+
+  # devices compatible_with plans
+  - { relation: compatible_with, src: device-router-ax2, dst: plan-fiber-500 }
+  - { relation: compatible_with, src: device-router-ax2, dst: plan-fiber-100 }
+  - { relation: compatible_with, src: device-router-ax2, dst: plan-fiber-100-legacy }
+  - { relation: compatible_with, src: device-router-be1, dst: plan-fiber-500 }
+  - { relation: compatible_with, src: device-modem-d3, dst: plan-starter-50 }
+  - { relation: compatible_with, src: device-modem-d3, dst: plan-fiber-100 }
+
+  # contract_term-daniel-2025 supersedes the current plan-fiber-100 page
+  - { relation: supersedes, src: contract_term-daniel-2025, dst: plan-fiber-100 }
+
+contradictions:
+  # hop 1: the customer's contract term directly contradicts the current marketing page.
+  - id: conflict-daniel-contract
+    conflict_type: temporal
+    hops: 1
+    winning_fact: "contract_term-daniel-2025:contract_months"
+    losing_fact: "plan-fiber-100:contract_months"
+    resolution_rule: "the customer contract supersedes the current marketing page"
+    question_hint: "is my plan contract free"
+
+  # hop 2: the promotion's flat waiver claim vs the region's overrides_fee chain to the fee doc.
+  - id: conflict-promo-price-north
+    conflict_type: inter_doc
+    hops: 2
+    winning_fact: "region-north:equipment_rental_override_amount"
+    losing_fact: "promotion-fiber500-launch-north:equipment_rental_waived"
+    resolution_rule: "the region's overrides_fee chain to the fee document governs actual billing; the promotion page's waiver claim is marketing copy, not the priced fee"
+    question_hint: "is equipment rental free during the north launch promo"

@@ -1,0 +1,31 @@
+# Machine readable companion to ADR-029.
+#
+# testing/harness/contract_tools/freeze_check.py (contract_tools.freeze_check.load_narrowed) reads
+# this file as the SINGLE authority for which RESERVED_TRACE_ATTRIBUTES (testing/harness/
+# contract_tools/loader.py) are narrowed out of the trace contract's v1.0.0 freeze (SP6 task 7). The
+# script never restates this list by hand, so the script and the ADR cannot silently drift apart.
+#
+# Add, remove, or reassign an entry ONLY together with an edit to the ADR, in the SAME commit. Per
+# the ADR: emitting a narrowed attribute for real later is a MINOR contract bump, never a silent
+# change -- remove the entry here (and say so in the ADR) in the same commit that adds the emitter.
+narrowed:
+  - attribute: atlas.retrieval.doc_ids
+    owner: "unscheduled (a future RAG observability follow up)"
+    reason: >-
+      backend/atlas/orchestration/atlas_graph.py's _knowledge_call deliberately hides the
+      retriever's own retrieved document ids behind the MCP search_knowledge tool boundary (a
+      disclosed simplification, trace_translation.py's own module docstring); no call site holds
+      this value today, so there is nothing to translate.
+
+  - attribute: atlas.rerank.scores_pre
+    owner: "unscheduled (a future RAG observability follow up)"
+    reason: >-
+      Same MCP boundary as atlas.retrieval.doc_ids above: pre rerank scores never cross out of
+      _knowledge_call into anything atlas_graph.py's own tracer.open call sites can see.
+
+  - attribute: atlas.rerank.scores_post
+    owner: "unscheduled (a future RAG observability follow up)"
+    reason: >-
+      Same MCP boundary as atlas.retrieval.doc_ids above: post rerank scores never cross out of
+      _knowledge_call either.
+

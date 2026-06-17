@@ -1,0 +1,118 @@
+[
+  {
+    "description": "Propose adding an add on to the signed in customer's service.",
+    "name": "add_addon",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "addon_id": {
+          "title": "Addon Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "addon_id"
+      ],
+      "title": "add_addonArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose booking an engineer visit for the signed in customer.",
+    "name": "book_engineer",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "title": "Slot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot"
+      ],
+      "title": "book_engineerArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose cancelling the signed in customer's service. reason_category should be\n'bereavement', 'job_loss', 'serious_illness', or 'none' -- used to determine whether the\nearly-termination fee is waived. Requires confirmation upstream.",
+    "name": "cancel_service",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "reason_category": {
+          "default": "none",
+          "title": "Reason Category",
+          "type": "string"
+        }
+      },
+      "title": "cancel_serviceArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose changing the signed in customer's plan. Requires confirmation upstream.",
+    "name": "change_plan",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id"
+      ],
+      "title": "change_planArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose opening a support ticket for the signed in customer.",
+    "name": "open_ticket",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "title": "open_ticketArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose removing an add on from the signed in customer's service.",
+    "name": "remove_addon",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "addon_id": {
+          "title": "Addon Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "addon_id"
+      ],
+      "title": "remove_addonArguments",
+      "type": "object"
+    }
+  },
+  {
+    "description": "Propose a modem reset for the signed in customer.",
+    "name": "reset_modem",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "reset_modemArguments",
+      "type": "object"
+    }
+  }
+]

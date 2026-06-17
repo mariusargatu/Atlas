@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-100-legacy",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-100-legacy:name",
+      "span": [
+        2,
+        18
+      ],
+      "value": "Fiber 100 Legacy"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:download_mbps",
+      "span": [
+        41,
+        44
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:upload_mbps",
+      "span": [
+        62,
+        65
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:monthly_price",
+      "span": [
+        104,
+        109
+      ],
+      "value": "24.99"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:contract_months",
+      "span": [
+        155,
+        157
+      ],
+      "value": "12"
+    }
+  ]
+}

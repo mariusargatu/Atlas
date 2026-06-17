@@ -1,0 +1,38 @@
+{
+  "doc_id": "doc-troubleshooting-device-router-ax2--plan-fiber-100-legacy",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-router-ax2:name",
+      "span": [
+        2,
+        12
+      ],
+      "value": "Router AX2"
+    },
+    {
+      "fact_ref": "device-router-ax2:firmware_version",
+      "span": [
+        246,
+        251
+      ],
+      "value": "1.4.2"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:name",
+      "span": [
+        87,
+        103
+      ],
+      "value": "Fiber 100 Legacy"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy:monthly_price",
+      "span": [
+        196,
+        201
+      ],
+      "value": "24.99"
+    }
+  ]
+}

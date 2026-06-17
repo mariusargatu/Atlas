@@ -1,0 +1,10 @@
+{
+  "dim": 1024,
+  "document_prefix": "",
+  "model_id": "BAAI/bge-m3",
+  "normalize": true,
+  "provider": "local-tei",
+  "query_prefix": "",
+  "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "server_version": "1.9.3"
+}

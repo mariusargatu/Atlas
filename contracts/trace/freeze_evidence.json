@@ -1,0 +1,6577 @@
+{
+ "_capture": {
+  "git_sha": "852204312d6afeddb89f30ef5991f34103e03c75",
+  "how_to_reproduce": [
+   "docker compose up -d postgres",
+   "load the committed corpus into postgres via rag_tools.ingest.load_parquet against indexes/corpus-0.1.1-bge-m3-03f983e0, the same idempotent load testing/tests/test_pgvector_adapter_live.py's own ensure_chunks_loaded fixture performs",
+   "docker compose --profile observability up -d otel-collector phoenix",
+   "set -a; source .env.fastlane; set +a   # ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL -> the real amd64 fastlane node, skipping the ~45min local Rosetta TEI warmup",
+   "a standalone operator script (not part of the committed test suite) constructs a REAL OtelTracer (opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter, endpoint http://localhost:4318, the compose otel-collector's own published OTLP HTTP port) and a REAL PgvectorRetriever (postgresql://atlas:atlas-dev-password@localhost:5433/atlas, the compose postgres service's own published port, plus the fastlane TEI endpoints above), then drives three scenarios through the REAL /chat/stream ASGI edge (atlas.chat_app.make_chat_app), in process (httpx's ASGITransport, no separate backend container needed -- the SAME real OTLP wire export a container would produce), replay mode, ATLAS_CHECKPOINTER=inmemory",
+   "round 2 (the model's answer AFTER seeing real retrieved passages) cassette content is never hand guessed: atlas.orchestration.atlas_graph._knowledge_call(retriever, query) is called directly first, against the SAME real retriever, to obtain the exact ToolMessage content a real turn would see, which then seeds the cassette",
+   "POST /auth/login {\"customer_id\": \"cust_current\"} -> access_token, once per scenario (a fresh app/tracer/cassette dir each time)",
+   "POST /chat/stream (SSE) with the access token, three scenarios: (a) thread freeze-rag-1p1, 'What is a data cap?' against the real (good password) retriever -- real embed/retrieve/rerank/assemble stage spans, the search_knowledge tool span, a full completed turn closing atlas.stage.ttft_ms; (b) thread freeze-bindguard-1p1, 'What plans do you offer?', a cassette proposing list_plans (a CATALOG tool, unreachable under the real classify_intent() heuristic, since the live edge only ever returns 'troubleshooting' for non action text, backend/atlas/domain/binding.py, which binds KNOWLEDGE_TOOLS | READ_TOOLS, no catalog tools) -- tools_read's own bind_guard GUARDRAIL span (atlas.guard.decision=block) plus a full streamed safe handoff answer, closing ttft; (c) thread freeze-degraded-1p1, 'What is a data cap?' against a SEPARATE retriever instance pointed at an intentionally wrong postgres password -- every retrieval attempt fails, refusal_trigger fires, the terminal refusal node span (atlas.degradation.mode=refusal), closing ttft",
+   "docker exec atlas-otel-collector-1 -> /var/log/otel/raw-otlp-archive.jsonl -> this file's 'exports' array (one parsed JSON object per JSONL line)"
+  ],
+  "scenarios": [
+   {
+    "backend": "healthy (real postgres dsn, real fastlane TEI)",
+    "outcome": "real RAG stages + search_knowledge tool span, full completed turn, closes ttft",
+    "question": "What is a data cap?",
+    "thread_id": "freeze-rag-1p1"
+   },
+   {
+    "backend": "healthy (real postgres dsn, real fastlane TEI)",
+    "outcome": "bind_guard GUARDRAIL span (block, list_plans unreachable under troubleshooting) + full streamed safe handoff answer, closes ttft",
+    "question": "What plans do you offer?",
+    "thread_id": "freeze-bindguard-1p1"
+   },
+   {
+    "backend": "degraded (wrong postgres password)",
+    "outcome": "refusal_trigger + refusal node span (atlas.degradation.mode=refusal), closes ttft",
+    "question": "What is a data cap?",
+    "thread_id": "freeze-degraded-1p1"
+   }
+  ],
+  "what": "I1 fix (SP6 final review): the raw OTLP archive the otel-collector's own file/raw_archive exporter wrote (infra/observability/otel-collector.yaml) during one live capture window against the docker compose observability profile, with a real OtelTracer (OTLP HTTP export) and the fastlane TEI node (.env.fastlane), REPLACING the SP6 task 7 capture now that OtelTracer.open() stamps atlas.turn.seq on every span (trace 1.1.0). Every span here is REAL and REDACTED (the SAME redaction the collector applies before either fan out target, Phoenix or this archive, ever sees a span -- see the redaction.redacted.keys / redaction.redacted.count diagnostic attributes the collector itself adds, visible on several spans below). This is the freeze's own evidence source (b); contract_tools.freeze_check.live_emitted_attributes reads it. Attribute key coverage checked against the prior capture (23 keys): all 23 still present, plus exactly one new key, atlas.turn.seq -- nothing regressed.",
+  "git_sha_note": "the capture ran on the mid fix wave working tree (dirty relative to 8522043, which cannot itself produce atlas.turn.seq); span content is validated by the freeze_check 30 of 30 gate, which reads attribute keys, and by the bidirectional join test",
+  "sp8_task1_addendum": {
+   "git_sha": "e5c82c388162fc7ed57236ce282916d3caa73146",
+   "why": "trace 1.1.0 to 1.2.0: the four attributes ADR-029 narrowed for SP8 (atlas.judge.id, atlas.judge.rubric_version, atlas.judge.verdict, atlas.subject.pseudonym) now have real emitters (testing/harness/judge/emission.py, backend/atlas/adapters/trace_translation.py's pseudonym_for). This addendum's 3 exports are APPENDED to the original 45 above, which are untouched and still valid evidence for every attribute they already proved.",
+   "how_to_reproduce": [
+    "docker compose --profile observability up -d otel-collector   # postgres/phoenix/otel-archive-init come up as its dependencies; no TEI/fastlane needed for this capture",
+    "a standalone operator script (not part of the committed test suite) constructs a REAL OtelTracer (opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter, endpoint http://localhost:4318, the compose otel-collector's own published OTLP HTTP port)",
+    "tracer.open('turn', 'turn', input=..., intent='troubleshooting', customer_id='cust_sp8_live_capture_001') -- a real turn span with a real customer_id, proving atlas.subject.pseudonym (the redacted span carries the HMAC, never the raw id or the input/intent passthrough keys, both stripped by the SAME redaction processor every other capture already goes through)",
+    "judge.emission.emit_verdict(tracer, root, JudgeContract('gpt-judge-2026-06-01', 'groundedness-v1', <hash>), 'grounded') then again with 'ungrounded' -- two judge_verdict spans, proving atlas.judge.id/atlas.judge.rubric_version/atlas.judge.verdict on both wire enum values",
+    "tracer._provider.force_flush() -- SimpleSpanProcessor already exports synchronously per span.end(), this just waits for the in flight export before the process exits",
+    "docker cp atlas-otel-collector-1:/var/log/otel/raw-otlp-archive.jsonl -> this addendum's own 3 export lines (the collector image ships neither sh nor cat, so docker cp reads the file directly rather than a docker exec cat, unlike the original capture's own step)"
+   ]
+  },
+  "sp9_task5_addendum": {
+   "git_sha": "3e79f25a09544d18803c118c6611437ec1d54199",
+   "why": "trace 1.2.0 to 1.3.0: the usage accounting trio ADR-029 narrowed since v0.1.0 (atlas.cost.input_tokens, atlas.cost.output_tokens, atlas.cost.usd) now has a real emitter (testing/harness/matrix/cost_emission.py's emit_cost, a new kind=\"llm\" span, generator_cost, never wired into the live graph -- the same D29 batch, report time disposition judge/emission.py's own module docstring already establishes). This addendum's 5 exports are APPENDED to the 48 above (45 original + the SP8 task 1 addendum's own 3), which are untouched and still valid evidence for every attribute they already proved.",
+   "how_to_reproduce": [
+    "docker compose --profile observability up -d otel-collector   # postgres/phoenix/otel-archive-init come up as its dependencies; no TEI/fastlane needed for this capture",
+    "a standalone operator script (not part of the committed test suite) constructs a REAL OtelTracer (opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter, endpoint http://localhost:4318, the compose otel-collector's own published OTLP HTTP port)",
+    "tracer.open('turn', 'turn', input=..., intent='troubleshooting', customer_id='cust_sp9_live_capture_001') -- a real turn span, the SAME parent nesting pattern the SP8 addendum already proved",
+    "matrix.cost_emission.emit_cost(tracer, root, model_id=..., input_tokens=..., output_tokens=..., usd=matrix.spend_gate.cost_from_usage(provider, usage)) three times (anthropic:claude-sonnet-5, openai:gpt-5.6-sol, ollama:qwen2.5:7b) -- three generator_cost spans, proving atlas.cost.input_tokens/output_tokens/usd, including a real, present $0.0 for the Ollama arm that always runs free (never omitted, never 'unavailable')",
+    "judge.emission.emit_verdict(tracer, root, JudgeContract('gpt-judge-2026-06-01', 'groundedness-v1', <hash>), 'grounded') alongside, proving the judge trio already closed still emits correctly in the same session (belt and suspenders, not required by this task)",
+    "tracer._provider.force_flush() -- SimpleSpanProcessor already exports synchronously per span.end(), this just waits for the in flight export before the process exits",
+    "docker cp atlas-otel-collector-1:/var/log/otel/raw-otlp-archive.jsonl -> this addendum's own 5 export lines (the collector image ships neither sh nor cat, so docker cp reads the file directly rather than a docker exec cat)"
+   ]
+  }
+ },
+ "exports": [
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890684244000",
+         "endTimeUnixNano": "1784523890684297000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "f29dad42434eb858",
+         "parentSpanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890722134000",
+         "endTimeUnixNano": "1784523890722161000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "665bb2c837169d58",
+         "parentSpanId": "f29dad42434eb858",
+         "flags": 256,
+         "name": "retrieve",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890727005000",
+         "endTimeUnixNano": "1784523904275753000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "4"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.retrieve_ms",
+           "value": {
+            "doubleValue": 13548.42358303722
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "cd342a446cbf4cba",
+         "parentSpanId": "f29dad42434eb858",
+         "flags": 256,
+         "name": "embed",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890726982000",
+         "endTimeUnixNano": "1784523904296412000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.embed_ms",
+           "value": {
+            "doubleValue": 13569.170832983218
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "1c5fb0c6a08d5146",
+         "parentSpanId": "f29dad42434eb858",
+         "flags": 256,
+         "name": "rerank",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890727022000",
+         "endTimeUnixNano": "1784523904300856000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "5"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RERANKER"
+           }
+          },
+          {
+           "key": "atlas.stage.rerank_ms",
+           "value": {
+            "doubleValue": 13573.585124977399
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "8e3f3f6e3e8d47bc",
+         "parentSpanId": "f29dad42434eb858",
+         "flags": 256,
+         "name": "search_knowledge",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904308392000",
+         "endTimeUnixNano": "1784523904308479000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "7"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "TOOL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "args,result"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "4342ebcc61398d62",
+         "parentSpanId": "f29dad42434eb858",
+         "flags": 256,
+         "name": "assemble",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904308206000",
+         "endTimeUnixNano": "1784523904315098000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "6"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.assemble_ms",
+           "value": {
+            "doubleValue": 6.78391702240333
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "98f65cc49384f588",
+         "parentSpanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904321187000",
+         "endTimeUnixNano": "1784523904321207000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "8"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "e845f6afe1e7dd76",
+         "parentSpanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "pre_render_guard",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904323904000",
+         "endTimeUnixNano": "1784523904323926000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "9"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.guard.decision",
+           "value": {
+            "stringValue": "allow"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "GUARDRAIL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "reason"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "1"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "7f2898d7ad747832",
+         "parentSpanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "render",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904325525000",
+         "endTimeUnixNano": "1784523904325543000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "10"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "output"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "1"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "43e7e4079c1b7edec3c129c9d259b67b",
+         "spanId": "0282f5902bb934ef",
+         "parentSpanId": "0ad6df5b1d0ddbd5",
+         "flags": 256,
+         "name": "ttft",
+         "kind": 1,
+         "startTimeUnixNano": "1784523890677630167",
+         "endTimeUnixNano": "1784523904327333000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.ttft_ms",
+           "value": {
+            "doubleValue": 13649.465041991789
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "c868898a81e751a02cf3f6bc70ba4ef1",
+         "spanId": "3549d21bc58cf3f1",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904359409000",
+         "endTimeUnixNano": "1784523904359438000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "c868898a81e751a02cf3f6bc70ba4ef1",
+         "spanId": "8fbf67f703a1661d",
+         "parentSpanId": "3549d21bc58cf3f1",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904364865000",
+         "endTimeUnixNano": "1784523904364885000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "c868898a81e751a02cf3f6bc70ba4ef1",
+         "spanId": "0df3fa3e1872ce54",
+         "parentSpanId": "8fbf67f703a1661d",
+         "flags": 256,
+         "name": "get_account_summary",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904376222000",
+         "endTimeUnixNano": "1784523904376249000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "TOOL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "args,result"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "d8fe8e12e2a1d18d",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904926944000",
+         "endTimeUnixNano": "1784523904926969000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "f556d934ef3c85ea",
+         "parentSpanId": "d8fe8e12e2a1d18d",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904930297000",
+         "endTimeUnixNano": "1784523904930314000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "86d0f4c2e8343f24",
+         "parentSpanId": "f556d934ef3c85ea",
+         "flags": 256,
+         "name": "retrieve",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904933099000",
+         "endTimeUnixNano": "1784523905546149000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "4"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.retrieve_ms",
+           "value": {
+            "doubleValue": 613.0250410060398
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "3482e03488cbcf18",
+         "parentSpanId": "f556d934ef3c85ea",
+         "flags": 256,
+         "name": "embed",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904933078000",
+         "endTimeUnixNano": "1784523905549973000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.embed_ms",
+           "value": {
+            "doubleValue": 616.8686670134775
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "3bb8d35d126ba8f6",
+         "parentSpanId": "f556d934ef3c85ea",
+         "flags": 256,
+         "name": "rerank",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904933116000",
+         "endTimeUnixNano": "1784523905551402000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "5"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RERANKER"
+           }
+          },
+          {
+           "key": "atlas.stage.rerank_ms",
+           "value": {
+            "doubleValue": 618.2620829786174
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "49f8c364efb78f4e",
+         "parentSpanId": "d8fe8e12e2a1d18d",
+         "flags": 256,
+         "name": "refusal_trigger",
+         "kind": 1,
+         "startTimeUnixNano": "1784523905562162000",
+         "endTimeUnixNano": "1784523905562189000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "6"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.guard.decision",
+           "value": {
+            "stringValue": "block"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "GUARDRAIL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "reason,tool"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "caa57647d726a543",
+         "parentSpanId": "d8fe8e12e2a1d18d",
+         "flags": 256,
+         "name": "refusal",
+         "kind": 1,
+         "startTimeUnixNano": "1784523905572199000",
+         "endTimeUnixNano": "1784523905572218000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "7"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.degradation.mode",
+           "value": {
+            "stringValue": "refusal"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "b6a67dce2fd0da8b0ecce54fa5cfff36",
+         "spanId": "8920c90597251270",
+         "parentSpanId": "d8fe8e12e2a1d18d",
+         "flags": 256,
+         "name": "ttft",
+         "kind": 1,
+         "startTimeUnixNano": "1784523904926061708",
+         "endTimeUnixNano": "1784523905575312000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.ttft_ms",
+           "value": {
+            "doubleValue": 649.2082080221735
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967506830000",
+         "endTimeUnixNano": "1784523967506872000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "135d2c83316ef920",
+         "parentSpanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967521295000",
+         "endTimeUnixNano": "1784523967521325000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "d1d998f1aa8433da",
+         "parentSpanId": "135d2c83316ef920",
+         "flags": 256,
+         "name": "retrieve",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967527622000",
+         "endTimeUnixNano": "1784523980728506000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "4"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.retrieve_ms",
+           "value": {
+            "doubleValue": 13200.595666014124
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "189c9f4554fab664",
+         "parentSpanId": "135d2c83316ef920",
+         "flags": 256,
+         "name": "embed",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967527596000",
+         "endTimeUnixNano": "1784523980737030000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.embed_ms",
+           "value": {
+            "doubleValue": 13209.185332991183
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "3ca3e38ccc516bf7",
+         "parentSpanId": "135d2c83316ef920",
+         "flags": 256,
+         "name": "rerank",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967527639000",
+         "endTimeUnixNano": "1784523980741790000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "5"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RERANKER"
+           }
+          },
+          {
+           "key": "atlas.stage.rerank_ms",
+           "value": {
+            "doubleValue": 13213.910459016915
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "8677fb63980cb794",
+         "parentSpanId": "135d2c83316ef920",
+         "flags": 256,
+         "name": "search_knowledge",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980743699000",
+         "endTimeUnixNano": "1784523980743737000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "7"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "TOOL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "args,result"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "3e82e61e91bf5d08",
+         "parentSpanId": "135d2c83316ef920",
+         "flags": 256,
+         "name": "assemble",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980743651000",
+         "endTimeUnixNano": "1784523980745826000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "6"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.assemble_ms",
+           "value": {
+            "doubleValue": 2.1445410093292594
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "47b48f94bf17545a",
+         "parentSpanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980757878000",
+         "endTimeUnixNano": "1784523980757899000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "8"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "5865ba5e2bf151d6",
+         "parentSpanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "pre_render_guard",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980763609000",
+         "endTimeUnixNano": "1784523980763633000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "9"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.guard.decision",
+           "value": {
+            "stringValue": "allow"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "GUARDRAIL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "reason"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "1"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "36e0aa593dc709c7",
+         "parentSpanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "render",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980765689000",
+         "endTimeUnixNano": "1784523980765709000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "10"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "output"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "1"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "038734a76cc44d82c406b909166bbfab",
+         "spanId": "e080baf4738d6dbe",
+         "parentSpanId": "1d7d9fb1f197208c",
+         "flags": 256,
+         "name": "ttft",
+         "kind": 1,
+         "startTimeUnixNano": "1784523967502917834",
+         "endTimeUnixNano": "1784523980768375000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.ttft_ms",
+           "value": {
+            "doubleValue": 13265.22716699401
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "0b9e824792ffd788c427372dec11f6c7",
+         "spanId": "a4f582a9dd28fc84",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980799326000",
+         "endTimeUnixNano": "1784523980799351000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "0b9e824792ffd788c427372dec11f6c7",
+         "spanId": "93a8aff25917d5d9",
+         "parentSpanId": "a4f582a9dd28fc84",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980802886000",
+         "endTimeUnixNano": "1784523980802903000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "0b9e824792ffd788c427372dec11f6c7",
+         "spanId": "03adc95c011950a4",
+         "parentSpanId": "a4f582a9dd28fc84",
+         "flags": 256,
+         "name": "bind_guard",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980805499000",
+         "endTimeUnixNano": "1784523980805525000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.guard.decision",
+           "value": {
+            "stringValue": "block"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "GUARDRAIL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "intent,tools"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "0b9e824792ffd788c427372dec11f6c7",
+         "spanId": "5307ac4fe3acb925",
+         "parentSpanId": "a4f582a9dd28fc84",
+         "flags": 256,
+         "name": "ttft",
+         "kind": 1,
+         "startTimeUnixNano": "1784523980796412416",
+         "endTimeUnixNano": "1784523980807845000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.ttft_ms",
+           "value": {
+            "doubleValue": 11.42995897680521
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "4e333f9bfae4bdb8",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981361748000",
+         "endTimeUnixNano": "1784523981361775000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "livecapturehash0000000000000000000000000000000000000000000000"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "b7bf0169e97816f4",
+         "parentSpanId": "4e333f9bfae4bdb8",
+         "flags": 256,
+         "name": "agent",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981365403000",
+         "endTimeUnixNano": "1784523981365424000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "claude-test"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "273049f86403dcca",
+         "parentSpanId": "b7bf0169e97816f4",
+         "flags": 256,
+         "name": "retrieve",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981368757000",
+         "endTimeUnixNano": "1784523981914042000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "4"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.retrieve_ms",
+           "value": {
+            "doubleValue": 545.2623749733903
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "76ca5f27da13fe37",
+         "parentSpanId": "b7bf0169e97816f4",
+         "flags": 256,
+         "name": "embed",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981368738000",
+         "endTimeUnixNano": "1784523981915829000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RETRIEVER"
+           }
+          },
+          {
+           "key": "atlas.stage.embed_ms",
+           "value": {
+            "doubleValue": 547.0662500010803
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "23e1beef42d83ae1",
+         "parentSpanId": "b7bf0169e97816f4",
+         "flags": 256,
+         "name": "rerank",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981368771000",
+         "endTimeUnixNano": "1784523981917173000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "5"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "RERANKER"
+           }
+          },
+          {
+           "key": "atlas.stage.rerank_ms",
+           "value": {
+            "doubleValue": 548.3791670412757
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "5322664fb6d60b4e",
+         "parentSpanId": "4e333f9bfae4bdb8",
+         "flags": 256,
+         "name": "refusal_trigger",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981918367000",
+         "endTimeUnixNano": "1784523981918390000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "6"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.guard.decision",
+           "value": {
+            "stringValue": "block"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "GUARDRAIL"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "reason,tool"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "c937111727089b5a",
+         "parentSpanId": "4e333f9bfae4bdb8",
+         "flags": 256,
+         "name": "refusal",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981920830000",
+         "endTimeUnixNano": "1784523981920848000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "7"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.degradation.mode",
+           "value": {
+            "stringValue": "refusal"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "1c8619114f125f909baeb45ff2703677",
+         "spanId": "72cc44fdd6a1e387",
+         "parentSpanId": "4e333f9bfae4bdb8",
+         "flags": 256,
+         "name": "ttft",
+         "kind": 1,
+         "startTimeUnixNano": "1784523981360662083",
+         "endTimeUnixNano": "1784523981922470000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.stage.ttft_ms",
+           "value": {
+            "doubleValue": 561.7966670542955
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "825085e882723a11c83e7bab9d7999a8",
+         "spanId": "9397af90751cafa8",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784559090901381000",
+         "endTimeUnixNano": "1784559090901421000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "sp8-task1-live-capture-config-hash"
+           }
+          },
+          {
+           "key": "atlas.corpus.version",
+           "value": {
+            "stringValue": "corpus-0.1.1"
+           }
+          },
+          {
+           "key": "atlas.index.build_id",
+           "value": {
+            "stringValue": "a86bc176d5bf7d04"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.2.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.subject.pseudonym",
+           "value": {
+            "stringValue": "7b95a9bff030dc90"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "825085e882723a11c83e7bab9d7999a8",
+         "spanId": "e9fd343d669c349c",
+         "parentSpanId": "9397af90751cafa8",
+         "flags": 256,
+         "name": "judge_verdict",
+         "kind": 1,
+         "startTimeUnixNano": "1784559090939642000",
+         "endTimeUnixNano": "1784559090939674000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.2.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.judge.id",
+           "value": {
+            "stringValue": "855261d217cb58c5785c372eb5f75bac4c2c3e0f4aeacce80c6214d1d1fb9550"
+           }
+          },
+          {
+           "key": "atlas.judge.rubric_version",
+           "value": {
+            "stringValue": "groundedness-v1"
+           }
+          },
+          {
+           "key": "atlas.judge.verdict",
+           "value": {
+            "stringValue": "grounded"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "EVALUATOR"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "825085e882723a11c83e7bab9d7999a8",
+         "spanId": "1dda80ade105e960",
+         "parentSpanId": "9397af90751cafa8",
+         "flags": 256,
+         "name": "judge_verdict",
+         "kind": 1,
+         "startTimeUnixNano": "1784559090942120000",
+         "endTimeUnixNano": "1784559090942139000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.2.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.judge.id",
+           "value": {
+            "stringValue": "855261d217cb58c5785c372eb5f75bac4c2c3e0f4aeacce80c6214d1d1fb9550"
+           }
+          },
+          {
+           "key": "atlas.judge.rubric_version",
+           "value": {
+            "stringValue": "groundedness-v1"
+           }
+          },
+          {
+           "key": "atlas.judge.verdict",
+           "value": {
+            "stringValue": "ungrounded"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "EVALUATOR"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "cc9bd99723f9dd4a1968dcd15b042045",
+         "spanId": "49ea140d8f9d1bab",
+         "flags": 256,
+         "name": "turn",
+         "kind": 1,
+         "startTimeUnixNano": "1784594719359729000",
+         "endTimeUnixNano": "1784594719359787000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "0"
+           }
+          },
+          {
+           "key": "atlas.config.hash",
+           "value": {
+            "stringValue": "sp9task5livecapturehash"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.3.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "CHAIN"
+           }
+          },
+          {
+           "key": "atlas.subject.pseudonym",
+           "value": {
+            "stringValue": "75400802b420d7e5"
+           }
+          },
+          {
+           "key": "redaction.redacted.keys",
+           "value": {
+            "stringValue": "input,intent"
+           }
+          },
+          {
+           "key": "redaction.redacted.count",
+           "value": {
+            "intValue": "2"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "cc9bd99723f9dd4a1968dcd15b042045",
+         "spanId": "592924a29acf300a",
+         "parentSpanId": "49ea140d8f9d1bab",
+         "flags": 256,
+         "name": "generator_cost",
+         "kind": 1,
+         "startTimeUnixNano": "1784594719394923000",
+         "endTimeUnixNano": "1784594719394954000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "1"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.3.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "anthropic:claude-sonnet-5"
+           }
+          },
+          {
+           "key": "atlas.cost.input_tokens",
+           "value": {
+            "intValue": "120"
+           }
+          },
+          {
+           "key": "atlas.cost.output_tokens",
+           "value": {
+            "intValue": "45"
+           }
+          },
+          {
+           "key": "atlas.cost.usd",
+           "value": {
+            "doubleValue": 0.0006900000000000001
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "cc9bd99723f9dd4a1968dcd15b042045",
+         "spanId": "86740e05174e730d",
+         "parentSpanId": "49ea140d8f9d1bab",
+         "flags": 256,
+         "name": "generator_cost",
+         "kind": 1,
+         "startTimeUnixNano": "1784594719400617000",
+         "endTimeUnixNano": "1784594719400641000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "2"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.3.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "openai:gpt-5.6-sol"
+           }
+          },
+          {
+           "key": "atlas.cost.input_tokens",
+           "value": {
+            "intValue": "300"
+           }
+          },
+          {
+           "key": "atlas.cost.output_tokens",
+           "value": {
+            "intValue": "90"
+           }
+          },
+          {
+           "key": "atlas.cost.usd",
+           "value": {
+            "doubleValue": 0.0042
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "cc9bd99723f9dd4a1968dcd15b042045",
+         "spanId": "9215ee3eedf61360",
+         "parentSpanId": "49ea140d8f9d1bab",
+         "flags": 256,
+         "name": "generator_cost",
+         "kind": 1,
+         "startTimeUnixNano": "1784594719407787000",
+         "endTimeUnixNano": "1784594719407814000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "3"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.3.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "gen_ai.request.model",
+           "value": {
+            "stringValue": "ollama:qwen2.5:7b"
+           }
+          },
+          {
+           "key": "atlas.cost.input_tokens",
+           "value": {
+            "intValue": "80"
+           }
+          },
+          {
+           "key": "atlas.cost.output_tokens",
+           "value": {
+            "intValue": "30"
+           }
+          },
+          {
+           "key": "atlas.cost.usd",
+           "value": {
+            "doubleValue": 0
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "LLM"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resourceSpans": [
+    {
+     "resource": {
+      "attributes": [
+       {
+        "key": "redaction.redacted.keys",
+        "value": {
+         "stringValue": "service.instance.id,service.name,telemetry.sdk.language,telemetry.sdk.name,telemetry.sdk.version"
+        }
+       },
+       {
+        "key": "redaction.redacted.count",
+        "value": {
+         "intValue": "5"
+        }
+       }
+      ]
+     },
+     "scopeSpans": [
+      {
+       "scope": {
+        "name": "atlas"
+       },
+       "spans": [
+        {
+         "traceId": "cc9bd99723f9dd4a1968dcd15b042045",
+         "spanId": "f0cff787fd23f2ed",
+         "parentSpanId": "49ea140d8f9d1bab",
+         "flags": 256,
+         "name": "judge_verdict",
+         "kind": 1,
+         "startTimeUnixNano": "1784594719409301000",
+         "endTimeUnixNano": "1784594719409323000",
+         "attributes": [
+          {
+           "key": "atlas.turn.seq",
+           "value": {
+            "stringValue": "4"
+           }
+          },
+          {
+           "key": "atlas.contract.trace_version",
+           "value": {
+            "stringValue": "1.3.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.synthetic",
+           "value": {
+            "boolValue": true
+           }
+          },
+          {
+           "key": "atlas.semconv.version",
+           "value": {
+            "stringValue": "0.64b0"
+           }
+          },
+          {
+           "key": "atlas.variant",
+           "value": {
+            "stringValue": "graph"
+           }
+          },
+          {
+           "key": "atlas.contract.dataset_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.manifest_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.contract.sse_version",
+           "value": {
+            "stringValue": "0.1.0"
+           }
+          },
+          {
+           "key": "atlas.privacy.content_captured",
+           "value": {
+            "boolValue": false
+           }
+          },
+          {
+           "key": "atlas.privacy.redaction_policy_version",
+           "value": {
+            "stringValue": "726bb9ddc4b174af"
+           }
+          },
+          {
+           "key": "atlas.judge.id",
+           "value": {
+            "stringValue": "a45ba2c12bf3e814bf1561bf50c846abdd2b815b01c2ccfe35332ed03de06c51"
+           }
+          },
+          {
+           "key": "atlas.judge.rubric_version",
+           "value": {
+            "stringValue": "groundedness-v1"
+           }
+          },
+          {
+           "key": "atlas.judge.verdict",
+           "value": {
+            "stringValue": "grounded"
+           }
+          },
+          {
+           "key": "openinference.span.kind",
+           "value": {
+            "stringValue": "EVALUATOR"
+           }
+          }
+         ],
+         "status": {}
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

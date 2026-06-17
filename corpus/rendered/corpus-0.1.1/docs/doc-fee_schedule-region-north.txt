@@ -1,0 +1,15 @@
+# North Region fee schedule
+
+Equipment rental override in this region: 5.00.
+
+## Region record
+
+coverage_type: urban and suburban
+equipment_rental_override_amount: 5.00
+name: North Region
+
+## Base fees
+
+Early Termination Fee: 150.00
+Equipment Rental Fee: 10.00
+Installation Fee: 49.99

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.contracts/manifest/0.1.0",
+  "x-contract-version": "0.1.0",
+  "title": "Atlas run manifest contract",
+  "type": "object",
+  "required": [
+    "run_id",
+    "git_sha",
+    "prompt_hash",
+    "model_snapshot",
+    "request_params",
+    "embedding_model",
+    "index_build_id",
+    "corpus_version",
+    "chunker_config_hash",
+    "retrieval_config",
+    "dataset_version",
+    "judge_id",
+    "contract_versions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string" },
+    "git_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "prompt_hash": { "type": "string" },
+    "model_snapshot": {
+      "type": "object",
+      "required": ["provider", "model_id", "revision"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "model_id": { "type": "string" },
+        "revision": { "type": "string", "not": { "const": "latest" } }
+      }
+    },
+    "request_params": { "type": "object" },
+    "embedding_model": {
+      "type": "object",
+      "required": ["id", "revision"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "revision": { "type": "string", "not": { "const": "latest" } }
+      }
+    },
+    "index_build_id": { "type": "string" },
+    "corpus_version": { "type": "string" },
+    "chunker_config_hash": { "type": "string" },
+    "retrieval_config": { "type": "object" },
+    "dataset_version": { "type": "string" },
+    "judge_id": { "type": ["string", "null"] },
+    "contract_versions": {
+      "type": "object",
+      "required": ["trace", "dataset", "manifest", "sse"],
+      "additionalProperties": false,
+      "properties": {
+        "trace": { "type": "string" },
+        "dataset": { "type": "string" },
+        "manifest": { "type": "string" },
+        "sse": { "type": "string" }
+      }
+    },
+    "taxonomy_version": { "type": "string" },
+    "image_digests": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^sha256:[0-9a-f]{8,64}$" }
+    }
+  }
+}

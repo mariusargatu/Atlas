@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-fee_schedule-region-central",
+  "doc_type": "fee_schedule",
+  "placements": [
+    {
+      "fact_ref": "region-central:coverage_type",
+      "span": [
+        104,
+        109
+      ],
+      "value": "urban"
+    },
+    {
+      "fact_ref": "region-central:name",
+      "span": [
+        116,
+        130
+      ],
+      "value": "Central Region"
+    },
+    {
+      "fact_ref": "fee-early-termination:amount",
+      "span": [
+        169,
+        175
+      ],
+      "value": "150.00"
+    },
+    {
+      "fact_ref": "fee-equipment-rental:amount",
+      "span": [
+        198,
+        203
+      ],
+      "value": "10.00"
+    },
+    {
+      "fact_ref": "fee-installation:amount",
+      "span": [
+        222,
+        227
+      ],
+      "value": "49.99"
+    }
+  ]
+}

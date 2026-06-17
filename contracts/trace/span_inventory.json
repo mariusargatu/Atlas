@@ -1,0 +1,187 @@
+[
+  {
+    "name": "*",
+    "kind": "tool",
+    "attrs": [
+      "args",
+      "proposal"
+    ]
+  },
+  {
+    "name": "*",
+    "kind": "tool",
+    "attrs": [
+      "args",
+      "result"
+    ]
+  },
+  {
+    "name": "agent",
+    "kind": "llm",
+    "attrs": [
+      "degradation_mode",
+      "model"
+    ]
+  },
+  {
+    "name": "agent",
+    "kind": "llm",
+    "attrs": [
+      "model"
+    ]
+  },
+  {
+    "name": "agent_failure",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason"
+    ]
+  },
+  {
+    "name": "agent_failure",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason",
+      "retryable"
+    ]
+  },
+  {
+    "name": "assemble",
+    "kind": "stage",
+    "attrs": []
+  },
+  {
+    "name": "bind_guard",
+    "kind": "guard",
+    "attrs": [
+      "intent",
+      "ok",
+      "tools"
+    ]
+  },
+  {
+    "name": "budget_guard",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason"
+    ]
+  },
+  {
+    "name": "cache",
+    "kind": "node",
+    "attrs": [
+      "generic",
+      "hit"
+    ]
+  },
+  {
+    "name": "embed",
+    "kind": "stage",
+    "attrs": []
+  },
+  {
+    "name": "execute_action",
+    "kind": "node",
+    "attrs": [
+      "applied",
+      "reason"
+    ]
+  },
+  {
+    "name": "execute_action",
+    "kind": "node",
+    "attrs": [
+      "applied",
+      "reference"
+    ]
+  },
+  {
+    "name": "generator_cost",
+    "kind": "llm",
+    "attrs": [
+      "input_tokens",
+      "model",
+      "output_tokens",
+      "usd"
+    ]
+  },
+  {
+    "name": "judge_verdict",
+    "kind": "judge",
+    "attrs": [
+      "judge_id",
+      "rubric_version",
+      "verdict"
+    ]
+  },
+  {
+    "name": "pre_action_guard",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason"
+    ]
+  },
+  {
+    "name": "pre_action_guard",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason",
+      "tool"
+    ]
+  },
+  {
+    "name": "pre_render_guard",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason"
+    ]
+  },
+  {
+    "name": "refusal",
+    "kind": "node",
+    "attrs": [
+      "degradation_mode"
+    ]
+  },
+  {
+    "name": "refusal_trigger",
+    "kind": "guard",
+    "attrs": [
+      "ok",
+      "reason",
+      "tool"
+    ]
+  },
+  {
+    "name": "render",
+    "kind": "node",
+    "attrs": [
+      "output"
+    ]
+  },
+  {
+    "name": "rerank",
+    "kind": "stage",
+    "attrs": []
+  },
+  {
+    "name": "retrieve",
+    "kind": "stage",
+    "attrs": []
+  },
+  {
+    "name": "turn",
+    "kind": "turn",
+    "attrs": [
+      "customer_id",
+      "input",
+      "intent"
+    ]
+  }
+]

@@ -1,0 +1,160 @@
+[project]
+name = "atlas"
+version = "0.0.1"
+description = "Atlas, a testable broadband support agent; the reference system for the 'Evals Are Checks, Not Tests' series."
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.2,<1.3",
+    "langchain-core>=0.3",
+    "mcp>=1.0",
+    "pydantic>=2.7",
+    "fastapi>=0.110",
+    "pyjwt>=2.8",
+    "uvicorn>=0.30",
+    "jsonschema>=4.26.0",
+    "pyyaml>=6.0.3",
+    "pyarrow>=25.0.0",
+    "psycopg[binary]>=3.3.4", # [binary] bundles libpq: the backend image (python:3.12-slim) has no
+    #                            system libpq, and plain psycopg fails ImportError at runtime without it
+    #                            (found live: SP3 task 7, the first task to actually boot the image)
+    "httpx>=0.27",
+    "langgraph-checkpoint-postgres>=3.1.0",
+    "alembic>=1.18.5",
+    "stamina>=26.1.0",
+    "sse-starlette>=3.4.4",
+    # OTel core (SP6 task 1): construct and locally export spans with zero network access (an in
+    # memory or console exporter needs nothing external), so these are safe direct dependencies for
+    # the hermetic lane. Pinned at or above the versions already resolved transitively via deepeval's
+    # rageval group, so adding them as direct deps does not move the resolved versions.
+    "opentelemetry-api>=1.43.0",
+    "opentelemetry-sdk>=1.43.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",      # honest coverage (`task cov`)
+    "hypothesis>=6.0",      # property based tests for the pure cores (stats, canonical)
+    "ruff>=0.14",           # lint gate (`task lint`), conservative default rule set
+]
+# Provider SDKs are only needed to RECORD cassettes (live), never to replay. The hermetic PR
+# lane installs neither, so a stray live call has no client to make it.
+record = [
+    "langchain-anthropic>=0.3",
+    "langchain-openai>=0.3",
+    "anthropic>=0.40",
+    "openai>=1.50",
+]
+# Local models via Ollama, a zero key, zero egress provider for the record/eval lanes (the agent
+# and/or the judge). Replay still gates; Ollama only feeds the recorder. nomic-embed-text can also
+# back the RAG `embedder` port. Needs a running Ollama daemon + a pulled model.
+ollama = [
+    "langchain-ollama>=0.2",
+]
+# RAG eval lane (doc 07, Option A): DeepEval's LLM-judged RAG metrics + synthetic generation, run by
+# an operator with a local Ollama judge. NON-gating; the hermetic PR lane installs none of this, so a
+# judged metric has no library to run and the deterministic IR/graph metrics are what gate.
+rageval = [
+    "deepeval==4.0.9",  # pinned: 4.0.8 was yanked. DeepEvalBaseLLM is the injectable-judge seam.
+]
+# Graph-RAG lane: a LIVE Neo4j behind the graph port. There is no in-process Cypher from Python, so
+# the in-memory adapter is the gate's graph and this is operator/dev-prod only.
+# REPOSITIONED (SP9 task 2): this group is the LLM-EXTRACTED comparison arm (neo4j-graphrag's
+# SimpleKGPipeline over the rendered corpus text), scored against the registry materialized Postgres
+# gold graph (`atlas.adapters.pg_knowledge_graph.PgKnowledgeGraph`, no extra dependency group: it is
+# psycopg, already a base dependency) via `quality.graph_metrics`. Neither arm is dead weight.
+# The `ollama` extra is dropped (SP4 task 1): neo4j-graphrag pins ollama<0.5.0, which conflicts with
+# langgraph>=1.2's langchain-core>=1.4 (forcing langchain-ollama>=1.0, which needs ollama>=0.6.1).
+# No code imports neo4j_graphrag's ollama integration (grepped repo wide), so the extra was dead weight.
+graph = [
+    "neo4j>=5.17,<7",
+    "neo4j-graphrag[experimental]>=1.18",
+    "testcontainers[neo4j]>=4.14",
+]
+# Read-surface red team (doc 07 -> the security article): live indirect-injection generation.
+redteam = [
+    "deepteam>=1.0",
+]
+# OTLP wire exporter (SP6 task 3): reaches a real network endpoint by construction, so it lives in
+# its own optional group, mirroring record/rageval/graph/redteam's own boundary -- never installed
+# by `task test`/`task install` (a bare `uv sync`). backend/Dockerfile installs this group alongside
+# `ollama` so the built container image can actually export over OTLP when an operator opts in via
+# ATLAS_TRACING=otel; a plain dev environment or the hermetic lane never needs it, and
+# backend/atlas/server.py's own `_otlp_exporter` imports it locally behind a try/except, falling back
+# to OtelTracer's console exporter when the group is not installed (so a stray ATLAS_TRACING=otel in
+# an environment without this group degrades to console export, never a hard failure).
+observability = [
+    "opentelemetry-exporter-otlp-proto-http>=1.43.0",
+]
+
+# v0.1 uses a pythonpath layout (no install step) so the import lint layers stay physical.
+# A uv workspace replaces this when backend/atlas and harness become installable packages.
+[tool.pytest.ini_options]
+pythonpath = ["backend", "testing/harness", "."]
+asyncio_mode = "auto"
+testpaths = ["testing/tests"]
+markers = [
+    "live: needs `docker compose up postgres tei-embed tei-rerank`; excluded from `task test` by default, run via `task test:live`.",
+    "live_slow: a live test whose own cost (a full corpus rebuild via live TEI embed calls, or a backend container restart) dominates the live tier's wall clock; always carries `live` too, so `task test` already deselects it -- this marker only lets an operator further split `task test:live` into a fast and a slow tier later.",
+]
+# `task test` (the PR lane) stays hermetic: live marked tests are excluded by default here, not
+# opted out of per invocation. `task test:live` overrides with an explicit `-m live` on the CLI,
+# which wins over this addopts value (pytest takes the LAST `-m` seen across ini + CLI).
+addopts = "-m 'not live'"
+
+# Coverage measures the CI reachable code only. The omit list is the risk based "do not test"
+# decision made explicit: Protocol stubs have no behaviour to cover, the live infra and provider
+# adapters run only outside the hermetic lane, and the record/seed scripts are operator entrypoints.
+# Counting them would either inflate "missing" (tempting low value mock tests) or hide real gaps.
+[tool.coverage.run]
+branch = true
+source = ["testing/harness", "backend/atlas"]
+omit = [
+    "testing/harness/recording/*",                        # operator entrypoints, capture cassettes (need keys)
+    "testing/harness/replay/providers.py",                # provider factory, record/eval lanes only
+    "testing/harness/evals/evalkit/__main__.py",          # eval lane demo entrypoint (task eval), operator-run
+    "testing/harness/evals/drift/__main__.py",            # drift lane demo entrypoint (task drift), operator-run
+    "testing/harness/evals/inference_oracle/__main__.py", # differential oracle demo (task oracle), operator-run
+    "testing/harness/judge/live_provisional.py",          # LIVE judge probe (task judge-live), needs keys + egress
+    "testing/harness/evals/benchmark/__main__.py",        # honest benchmark study (task benchmark), run by an operator
+    "testing/harness/evals/rageval/*",                    # DeepEval RAG lane (task rageval), LLM judge + keys, operator-run
+    "testing/harness/evals/graphrag/*",                   # graph-extraction study (task graph), operator-run
+    "testing/harness/evals/ragset/*",                     # synthetic set generation (task ragset), needs deepeval + Ollama
+    "testing/harness/evals/redteam/*",                    # red-team lane (task redteam), live attack generation
+    "testing/harness/evals/monitor/__main__.py",          # prod-monitoring sketch (task monitor); budget.py IS gated
+    "testing/harness/evals/mutation/__main__.py",          # live semantic-mutation lane (task mutation); mutants.py IS gated
+    "testing/harness/evals/trajectory/__main__.py",        # DeepEval agentic lane (task trajectory); the grading modules ARE gated
+    "testing/harness/evals/simulation/__main__.py",        # persona simulation lane (task simulation); driver/grade/model ARE gated
+    "testing/harness/metamorphic/__main__.py",             # metamorphic operator entrypoint (task metamorphic); the frozen families + invariants ARE gated
+    "testing/harness/corpus_mutation/__main__.py",         # corpus mutation live/burst lane (task corpus-mutation); selection/scope/tracking ARE gated
+    "testing/harness/corpus_mutation/rendering.py",        # re-render + write I/O, live/burst only; selection.affected_doc_ids IS gated
+    "testing/harness/load/__main__.py",                    # the Phoenix join CLI run after a k6 run (task load:join), run by an operator; phoenix_join.py's own join/summarize functions ARE gated
+    "testing/harness/matrix/__main__.py",                  # matrix live/burst CLI entrypoint (task matrix:live), operator-run; live_driver.py's/live_search.py's own assembly logic IS gated
+    "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
+    "backend/atlas/adapters/neo4j_graph.py",     # live Neo4j graph adapter, the LLM-extracted comparison arm (SP9 task 2), operator/dev-prod only (no in-process Cypher)
+    "backend/atlas/ports/*",                     # Protocol definitions, signatures, not behaviour
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "\\.\\.\\.",                  # Protocol method bodies (`...`)
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[tool.uv]
+package = false
+
+# Lint gate (`task lint` / `uvx ruff check .`). line-length matches the p99 of the existing
+# codebase (measured, not guessed). Conservative rule set: the ruff defaults only, no opinionated
+# add-ons. format --check is not wired up: a first run flags most of the tree as unformatted,
+# which is a repo-wide reformat decision, not a lint task's call to make.
+[tool.ruff]
+line-length = 110
+extend-exclude = [".venv", "node_modules", "frontend"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

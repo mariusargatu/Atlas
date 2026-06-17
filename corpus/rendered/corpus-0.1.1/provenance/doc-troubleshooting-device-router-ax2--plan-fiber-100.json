@@ -1,0 +1,38 @@
+{
+  "doc_id": "doc-troubleshooting-device-router-ax2--plan-fiber-100",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-router-ax2:name",
+      "span": [
+        19,
+        29
+      ],
+      "value": "Router AX2"
+    },
+    {
+      "fact_ref": "device-router-ax2:firmware_version",
+      "span": [
+        205,
+        210
+      ],
+      "value": "1.4.2"
+    },
+    {
+      "fact_ref": "plan-fiber-100:name",
+      "span": [
+        84,
+        93
+      ],
+      "value": "Fiber 100"
+    },
+    {
+      "fact_ref": "plan-fiber-100:monthly_price",
+      "span": [
+        142,
+        147
+      ],
+      "value": "29.99"
+    }
+  ]
+}

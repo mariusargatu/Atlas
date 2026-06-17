@@ -1,0 +1,7 @@
+[
+  { "event": "message_start", "session_id": "sess-02cd", "trace_id": "tr-8c1d77aa" },
+  { "event": "degradation", "mode": "drop_rerank" },
+  { "event": "token", "text": "Your plan " },
+  { "event": "error", "code": "provider_529", "message": "provider overloaded mid stream", "recoverable": false },
+  { "event": "message_end", "finish_reason": "error" }
+]

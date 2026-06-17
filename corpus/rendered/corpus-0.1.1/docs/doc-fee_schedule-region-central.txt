@@ -1,0 +1,14 @@
+# Central Region fee schedule
+
+No fee overrides apply in this region.
+
+## Region record
+
+coverage_type: urban
+name: Central Region
+
+## Base fees
+
+Early Termination Fee: 150.00
+Equipment Rental Fee: 10.00
+Installation Fee: 49.99

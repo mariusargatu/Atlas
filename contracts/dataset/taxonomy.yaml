@@ -1,0 +1,97 @@
+# The versioned failure taxonomy (D34): every code a promoted dataset case's `failure_class` field
+# (contracts/dataset/schema.json, typed ["string", "null"], a free string, never a schema enum) may
+# carry. See testing/harness/dataset_tools/taxonomy.py's own module docstring for the reasoning: an
+# enum on the dataset schema would force a MAJOR bump on the case shape every time triage names one
+# new code, which conflicts with this file's own independent semver below.
+#
+# Structured like corpus/registry/core.yaml (HLD D4's own hand authored root artifact): a top level
+# semver plus one entry per code, each an id, a description, and one concrete example grounded in
+# what the judge and the fact registry actually surface (the seven starter codes below are not
+# invented categories; each one names a failure this repo's own judge, registry, or tool binding
+# machinery can actually produce).
+#
+# taxonomy_version is this file's OWN version, distinct from contracts/dataset/schema.json's
+# x-contract-version (0.1.0, untouched by this file): a new code added by a later triage pass bumps
+# taxonomy_version alone, never the case shape's own contract version.
+
+taxonomy_version: "0.1.0"
+
+codes:
+  - id: ungrounded_claim
+    description: >
+      The answer states a factual claim that the cited retrieved context does not entail: the
+      judge's own binary groundedness rubric verdict, translated to the wire vocabulary "ungrounded"
+      at the trace boundary (atlas.judge.verdict). The most direct failure class this taxonomy
+      names, since it is the one the judge is built to detect by construction.
+    example: >
+      Asked "is my plan contract free," the agent answers "yes, no contract at all," but the only
+      chunk actually cited is plan-fiber-100's current marketing page (contract_months: 0); nothing
+      in the cited context speaks to the customer's own signed term at all.
+
+  - id: missed_refusal
+    description: >
+      The agent answers a question the corpus cannot ground at all instead of declining. The
+      registry's never rendered pool (render: false, e.g. plan-quantum-5g, fee-teleport-setup) exists
+      exactly to make this mechanically checkable: nothing grounds those entities anywhere in the
+      corpus, so any confident answer about one is a miss by construction, not by degree.
+    example: >
+      Asked about "the Quantum 5G plan," the agent answers with a price and speed instead of
+      declining; plan-quantum-5g is render: false, so no customer facing document ever states either
+      value, and a correct answer says so.
+
+  - id: false_refusal
+    description: >
+      The agent declines to answer a question the corpus genuinely can ground, when a real document
+      exists and grounds the fact. The inverse of missed_refusal: over caution costing a real,
+      retrievable answer.
+    example: >
+      Asked "what is the installation fee," the agent says it cannot find that information, when
+      fee-installation (render: true, amount 49.99) is a rendered, retrievable entity the corpus
+      actually documents.
+
+  - id: wrong_tool
+    description: >
+      The agent reaches for a tool whose data source cannot answer the question, when a different
+      reachable tool would have. Atlas exposes three distinct data sources that never share identity:
+      the account read tools (get_account_summary, get_usage, get_bill, get_equipment, list_tickets)
+      return this customer's own account state; get_plan returns the public plan catalog; and
+      search_knowledge retrieves the rendered support corpus (contract terms, regional overrides,
+      policies). Reaching into the wrong one yields a confident answer with no support behind it.
+    example: >
+      Asked whether their plan is contract free, the agent calls the account tool get_account_summary
+      (which returns only a boolean has_contract for the demo account) instead of search_knowledge,
+      the sole tool that retrieves the customer specific contract override documented in the corpus;
+      the account call cannot see a rendered corpus fact at all, so the answer misses the override.
+
+  - id: stale_fact
+    description: >
+      The answer cites a fact that a newer, superseding document has since replaced, without the
+      contradiction being one of the registry's own typed pairs. Distinct from conflict_misresolution
+      below: this is drift against an updated corpus, not a resolution rule the registry names
+      explicitly.
+    example: >
+      The answer quotes plan-fiber-100-legacy's 2025 vintage price after the current plan-fiber-100
+      page has superseded it for new signups; the cited document is real, just no longer the
+      governing one for this customer's situation.
+
+  - id: conflict_misresolution
+    description: >
+      The answer states the losing_fact side of one of the registry's own typed contradictions
+      (conflict-daniel-contract, conflict-promo-price-north) instead of the winning_fact side each
+      contradiction's resolution_rule names. The most precisely gradeable failure in this taxonomy,
+      since the registry itself declares which side is correct.
+    example: >
+      Asked "is equipment rental free during the north launch promo," the agent answers "yes, fully
+      waived," the promotion page's own marketing claim (the losing_fact), when region-north's
+      overrides_fee chain actually prices it at 5.00 (the winning_fact per conflict-promo-price-north's
+      own resolution_rule).
+
+  - id: hallucinated_entity
+    description: >
+      The answer names a plan, fee, device, or policy that does not exist anywhere in the registry,
+      rendered or not. Distinct from missed_refusal: that code covers a real registry entity the
+      corpus withholds; this one covers an entity the model invented outright, with no registry
+      counterpart at all.
+    example: >
+      The agent describes "the Fiber 1000 Business plan" and quotes a price for it; no entity with
+      that id or name exists in corpus/registry/core.yaml at any render value, rendered or hidden.

@@ -1,0 +1,55 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-500--region-north",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-500--region-north:name",
+      "span": [
+        161,
+        170
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:download_mbps",
+      "span": [
+        206,
+        209
+      ],
+      "value": "500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:upload_mbps",
+      "span": [
+        236,
+        239
+      ],
+      "value": "500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:monthly_price",
+      "span": [
+        278,
+        283
+      ],
+      "value": "38.99"
+    },
+    {
+      "clause": "No contract. Cancel any time.",
+      "fact_ref": "plan-fiber-500--region-north:contract_months",
+      "span": [
+        19,
+        48
+      ],
+      "value": "0"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:region",
+      "span": [
+        301,
+        313
+      ],
+      "value": "region-north"
+    }
+  ]
+}

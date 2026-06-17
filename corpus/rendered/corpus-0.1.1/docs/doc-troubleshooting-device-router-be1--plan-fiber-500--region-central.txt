@@ -1,0 +1,14 @@
+# Router BE1 connectivity troubleshooting guide
+
+Customers using the Router BE1 on the Fiber 500 plan should follow this
+guide if connectivity issues occur.
+
+Applies to Fiber 500 at 43.99 per month in the region-central region.
+
+Step 1: verify firmware version 1.0.1 is installed on the
+Router BE1.
+Step 2: disconnect power for at least 30 seconds, then reconnect.
+Step 3: confirm the connection status indicator shows a stable signal.
+
+Support cases referencing the Router BE1 should include the firmware version,
+1.0.1, for faster resolution.

@@ -1,0 +1,13 @@
+# {plan_name} broadband plan
+
+{plan_name} gives you {download_mbps} Mbps download and {upload_mbps} Mbps upload
+for {monthly_price} per month{region_clause}.
+
+## Contract
+
+{contract_clause}
+
+## Whats included
+
+Standard installation and a compatible router. Equipment rental is billed
+separately where applicable.

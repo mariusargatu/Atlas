@@ -1,0 +1,38 @@
+{
+  "doc_id": "doc-troubleshooting-device-router-be1--plan-fiber-500",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-router-be1:name",
+      "span": [
+        2,
+        12
+      ],
+      "value": "Router BE1"
+    },
+    {
+      "fact_ref": "device-router-be1:firmware_version",
+      "span": [
+        232,
+        237
+      ],
+      "value": "1.0.1"
+    },
+    {
+      "fact_ref": "plan-fiber-500:name",
+      "span": [
+        87,
+        96
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "plan-fiber-500:monthly_price",
+      "span": [
+        182,
+        187
+      ],
+      "value": "39.99"
+    }
+  ]
+}

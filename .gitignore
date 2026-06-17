@@ -1,0 +1,58 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+.coverage
+*.egg-info/
+.env
+.DS_Store
+uv.lock.tmp
+
+# tool / session artifacts (never part of the repo)
+.playwright-mcp/
+.mutmut-cache
+# untracked local material, must never ship
+interview-prep/
+# DeepEval telemetry/cache written by the judged operator lane (task trajectory-record / rageval)
+.deepeval/
+# stray root screenshots from local verification runs
+/*.png
+
+# frontend (frontend)
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+
+# multi-agent orchestration scratch state, never ships
+.superpowers/
+
+# infra (infra/README.md): decrypted secrets and kubeconfig artifacts are local only, never
+# committed. Encrypted infra/**/secrets.enc.yaml files are the committed form and are not matched
+# by these patterns.
+infra/**/secrets.yaml
+infra/**/*.decrypted.yaml
+infra/.kube/
+infra/kubeconfig*
+infra/tofu/**/.terraform/
+infra/tofu/**/*.tfstate
+infra/tofu/**/*.tfstate.*
+.env.fastlane
+# Task 5: the burst tier's own non secret, operator specific config (ATLAS_BURST_DOMAIN,
+# ATLAS_BURST_ACME_EMAIL), same discipline as .env.fastlane above -- see infra/README.md.
+.env.burst
+
+# SP8 Task 4: the local label store (a local path standing in for the S3 label prefix, D30) -- real
+# labels written by a running backend, runtime state, never committed. The fixture item SET
+# (testing/harness/dataset_tools/label_items.fixture.jsonl) is committed on purpose; this is the
+# separate, gitignored OUTPUT a labeling session writes to.
+/var/labels/
+
+# SP9 task 4's live driver / task matrix:live (testing/harness/matrix/__main__.py): the live matrix
+# run's own manifest, per query result files, cassettes, and content hash cache, real output from
+# a real operator/burst run, never committed -- the same "runtime state, gitignored" discipline
+# /var/labels/ above already applies to the labeling session's own output.
+/var/matrix/

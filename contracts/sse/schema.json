@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.contracts/sse/0.1.0",
+  "x-contract-version": "0.1.0",
+  "title": "Atlas SSE event vocabulary",
+  "oneOf": [
+    { "$ref": "#/$defs/message_start" },
+    { "$ref": "#/$defs/token" },
+    { "$ref": "#/$defs/citation" },
+    { "$ref": "#/$defs/degradation" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/message_end" }
+  ],
+  "$defs": {
+    "message_start": {
+      "type": "object",
+      "required": ["event", "session_id", "trace_id"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "message_start" },
+        "session_id": { "type": "string" },
+        "trace_id": { "type": "string" }
+      }
+    },
+    "token": {
+      "type": "object",
+      "required": ["event", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "token" },
+        "text": { "type": "string" }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "required": ["event", "doc_id"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "citation" },
+        "doc_id": { "type": "string" },
+        "entity_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "degradation": {
+      "type": "object",
+      "required": ["event", "mode"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "degradation" },
+        "mode": { "enum": ["retry", "provider_fallback", "drop_rerank", "lexical_only", "refusal"] }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["event", "code", "message", "recoverable"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "error" },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "recoverable": { "type": "boolean" }
+      }
+    },
+    "message_end": {
+      "type": "object",
+      "required": ["event", "finish_reason"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "message_end" },
+        "finish_reason": { "enum": ["complete", "refusal", "truncated", "error"] }
+      }
+    }
+  }
+}

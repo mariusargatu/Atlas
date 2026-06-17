@@ -1,0 +1,30 @@
+{
+  "doc_id": "doc-device_manual-device-modem-d3",
+  "doc_type": "device_manual",
+  "placements": [
+    {
+      "fact_ref": "device-modem-d3:name",
+      "span": [
+        2,
+        10
+      ],
+      "value": "Modem D3"
+    },
+    {
+      "fact_ref": "device-modem-d3:device_type",
+      "span": [
+        55,
+        60
+      ],
+      "value": "modem"
+    },
+    {
+      "fact_ref": "device-modem-d3:firmware_version",
+      "span": [
+        79,
+        84
+      ],
+      "value": "3.2.1"
+    }
+  ]
+}

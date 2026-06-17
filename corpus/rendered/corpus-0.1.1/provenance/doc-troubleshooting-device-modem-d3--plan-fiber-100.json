@@ -1,0 +1,38 @@
+{
+  "doc_id": "doc-troubleshooting-device-modem-d3--plan-fiber-100",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-modem-d3:name",
+      "span": [
+        19,
+        27
+      ],
+      "value": "Modem D3"
+    },
+    {
+      "fact_ref": "device-modem-d3:firmware_version",
+      "span": [
+        201,
+        206
+      ],
+      "value": "3.2.1"
+    },
+    {
+      "fact_ref": "plan-fiber-100:name",
+      "span": [
+        80,
+        89
+      ],
+      "value": "Fiber 100"
+    },
+    {
+      "fact_ref": "plan-fiber-100:monthly_price",
+      "span": [
+        138,
+        143
+      ],
+      "value": "29.99"
+    }
+  ]
+}

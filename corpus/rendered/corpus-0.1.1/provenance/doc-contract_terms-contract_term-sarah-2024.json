@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-contract_terms-contract_term-sarah-2024",
+  "doc_type": "contract_terms",
+  "placements": [
+    {
+      "fact_ref": "contract_term-sarah-2024:name",
+      "span": [
+        36,
+        62
+      ],
+      "value": "Sarah's 2024 Contract Term"
+    },
+    {
+      "fact_ref": "contract_term-sarah-2024:customer_name",
+      "span": [
+        120,
+        125
+      ],
+      "value": "Sarah"
+    },
+    {
+      "fact_ref": "contract_term-sarah-2024:contract_months",
+      "span": [
+        145,
+        147
+      ],
+      "value": "24"
+    },
+    {
+      "fact_ref": "contract_term-sarah-2024:vintage_year",
+      "span": [
+        174,
+        178
+      ],
+      "value": "2024"
+    },
+    {
+      "fact_ref": "fee-early-termination:amount",
+      "span": [
+        268,
+        274
+      ],
+      "value": "150.00"
+    }
+  ]
+}

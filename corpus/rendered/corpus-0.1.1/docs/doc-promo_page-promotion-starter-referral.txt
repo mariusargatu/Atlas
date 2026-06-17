@@ -1,0 +1,15 @@
+# Starter 50 Referral Credit
+
+This promotion applies to the Starter 50 plan.
+
+This promotion provides a 25.00 credit.
+
+No equipment rental waiver is claimed by this promotion.
+
+## Promotion record
+
+applies_plan: plan-starter-50
+credit_amount: 25.00
+end_date: 2026-12-31
+name: Starter 50 Referral Credit
+start_date: 2026-01-01

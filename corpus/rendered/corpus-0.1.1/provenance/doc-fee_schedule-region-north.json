@@ -1,0 +1,54 @@
+{
+  "doc_id": "doc-fee_schedule-region-north",
+  "doc_type": "fee_schedule",
+  "placements": [
+    {
+      "fact_ref": "region-north:coverage_type",
+      "span": [
+        111,
+        129
+      ],
+      "value": "urban and suburban"
+    },
+    {
+      "fact_ref": "region-north:equipment_rental_override_amount",
+      "span": [
+        164,
+        168
+      ],
+      "value": "5.00"
+    },
+    {
+      "fact_ref": "region-north:name",
+      "span": [
+        175,
+        187
+      ],
+      "value": "North Region"
+    },
+    {
+      "fact_ref": "fee-early-termination:amount",
+      "span": [
+        226,
+        232
+      ],
+      "value": "150.00"
+    },
+    {
+      "fact_ref": "fee-equipment-rental:amount",
+      "span": [
+        255,
+        260
+      ],
+      "value": "10.00"
+    },
+    {
+      "fact_ref": "fee-installation:amount",
+      "span": [
+        279,
+        284
+      ],
+      "value": "49.99"
+    }
+  ]
+}

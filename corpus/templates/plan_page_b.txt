@@ -1,0 +1,14 @@
+## Contract terms
+
+{contract_clause}
+
+## Whats included
+
+Installation and equipment fees for your region are listed in the
+regional fee schedule.
+
+# {plan_name}
+
+We are pleased to offer the {plan_name} broadband plan, providing
+{download_mbps} Mbps download and {upload_mbps} Mbps upload for
+{monthly_price} per month{region_clause}.

@@ -1,0 +1,54 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-100-legacy--region-coast",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:name",
+      "span": [
+        2,
+        18
+      ],
+      "value": "Fiber 100 Legacy"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:download_mbps",
+      "span": [
+        41,
+        44
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:upload_mbps",
+      "span": [
+        62,
+        65
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:monthly_price",
+      "span": [
+        104,
+        109
+      ],
+      "value": "28.99"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:contract_months",
+      "span": [
+        182,
+        184
+      ],
+      "value": "12"
+    },
+    {
+      "fact_ref": "plan-fiber-100-legacy--region-coast:region",
+      "span": [
+        127,
+        139
+      ],
+      "value": "region-coast"
+    }
+  ]
+}

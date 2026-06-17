@@ -1,0 +1,23 @@
+{
+  "chunk_count": 45,
+  "chunker_hash": "03f983e02d74397b",
+  "chunker_version": "hchunk-1",
+  "corpus_content_hash": "bf62c80c90fc5e296de176c670667c82fecb33746d501116a1c752825244c5ca",
+  "corpus_version": "corpus-0.1.1",
+  "doc_count": 45,
+  "index_build_id": "a86bc176d5bf7d04",
+  "index_params": {
+    "ef_construction": 128,
+    "m": 16
+  },
+  "models_lock": {
+    "embedding": {
+      "model_id": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181"
+    },
+    "reranker": {
+      "model_id": "BAAI/bge-reranker-v2-m3",
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    }
+  }
+}

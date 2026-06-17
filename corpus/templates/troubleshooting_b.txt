@@ -1,0 +1,14 @@
+# {name} connectivity troubleshooting guide
+
+Customers using the {name} on the {plan_name} plan should follow this
+guide if connectivity issues occur.
+
+Applies to {plan_name} at {monthly_price} per month{region_clause}.
+
+Step 1: verify firmware version {firmware_version} is installed on the
+{name}.
+Step 2: disconnect power for at least 30 seconds, then reconnect.
+Step 3: confirm the connection status indicator shows a stable signal.
+
+Support cases referencing the {name} should include the firmware version,
+{firmware_version}, for faster resolution.

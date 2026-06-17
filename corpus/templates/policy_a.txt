@@ -1,0 +1,8 @@
+# {name} policy
+
+This document describes the {name} that applies to your account.
+
+{policy_detail}
+
+Policies are subject to change; the version in effect is the one shown in
+your current account terms.

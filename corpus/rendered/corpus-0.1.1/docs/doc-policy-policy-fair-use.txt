@@ -1,0 +1,8 @@
+# Fair Use Policy policy
+
+This document describes the Fair Use Policy that applies to your account.
+
+Usage above 1200 GB in a billing cycle may be throttled to 10 Mbps.
+
+Policies are subject to change; the version in effect is the one shown in
+your current account terms.

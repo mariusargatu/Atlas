@@ -1,0 +1,17 @@
+# Fiber 500 North Launch Promo
+
+This promotion applies to the Fiber 500 plan.
+
+The promotional price is 29.99 per month.
+
+Equipment rental waived: true.
+
+## Promotion record
+
+applies_plan: plan-fiber-500
+end_date: 2026-03-31
+equipment_rental_waived: true
+name: Fiber 500 North Launch Promo
+promo_monthly_price: 29.99
+region: region-north
+start_date: 2026-01-01

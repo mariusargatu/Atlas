@@ -1,0 +1,30 @@
+{
+  "doc_id": "doc-policy-policy-outage-credits",
+  "doc_type": "policy",
+  "placements": [
+    {
+      "fact_ref": "policy-outage-credits:name",
+      "span": [
+        2,
+        22
+      ],
+      "value": "Outage Credit Policy"
+    },
+    {
+      "fact_ref": "policy-outage-credits:credit_per_hour",
+      "span": [
+        136,
+        140
+      ],
+      "value": "5.00"
+    },
+    {
+      "fact_ref": "policy-outage-credits:max_monthly_credit",
+      "span": [
+        178,
+        183
+      ],
+      "value": "50.00"
+    }
+  ]
+}

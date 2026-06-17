@@ -1,0 +1,15 @@
+# {name} device manual
+
+Model: {name}
+Device type: {device_type}
+Firmware version: {firmware_version}
+
+## Care and maintenance
+
+Keep the {name} in a well ventilated location away from direct sunlight.
+Do not submerge the device in water.
+
+## Firmware
+
+This manual reflects firmware version {firmware_version}. Check for
+updates periodically to keep the {name} compatible with future plans.

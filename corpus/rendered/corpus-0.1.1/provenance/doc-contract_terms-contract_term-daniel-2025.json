@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-contract_terms-contract_term-daniel-2025",
+  "doc_type": "contract_terms",
+  "placements": [
+    {
+      "fact_ref": "contract_term-daniel-2025:name",
+      "span": [
+        37,
+        64
+      ],
+      "value": "Daniel's 2025 Contract Term"
+    },
+    {
+      "fact_ref": "contract_term-daniel-2025:customer_name",
+      "span": [
+        122,
+        128
+      ],
+      "value": "Daniel"
+    },
+    {
+      "fact_ref": "contract_term-daniel-2025:contract_months",
+      "span": [
+        148,
+        150
+      ],
+      "value": "12"
+    },
+    {
+      "fact_ref": "contract_term-daniel-2025:vintage_year",
+      "span": [
+        177,
+        181
+      ],
+      "value": "2025"
+    },
+    {
+      "fact_ref": "fee-early-termination:amount",
+      "span": [
+        271,
+        277
+      ],
+      "value": "150.00"
+    }
+  ]
+}

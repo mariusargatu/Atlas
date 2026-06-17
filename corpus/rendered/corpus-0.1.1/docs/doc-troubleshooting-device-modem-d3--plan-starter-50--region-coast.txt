@@ -1,0 +1,13 @@
+# Troubleshooting: Modem D3
+
+If your Modem D3 is not connecting properly on the Starter 50 plan, try
+these steps.
+
+Applies to Starter 50 at 23.99 per month in the region-coast region.
+
+1. Confirm the device firmware is at version 3.2.1 or later.
+2. Power cycle the Modem D3 for 30 seconds, then reconnect.
+3. Confirm the link light is solid before retrying your connection.
+
+If the issue persists, contact support and reference your Modem D3 firmware
+version 3.2.1.

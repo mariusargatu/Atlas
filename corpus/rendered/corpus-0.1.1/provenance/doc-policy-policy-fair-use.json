@@ -1,0 +1,30 @@
+{
+  "doc_id": "doc-policy-policy-fair-use",
+  "doc_type": "policy",
+  "placements": [
+    {
+      "fact_ref": "policy-fair-use:name",
+      "span": [
+        2,
+        17
+      ],
+      "value": "Fair Use Policy"
+    },
+    {
+      "fact_ref": "policy-fair-use:threshold_gb",
+      "span": [
+        113,
+        117
+      ],
+      "value": "1200"
+    },
+    {
+      "fact_ref": "policy-fair-use:throttle_mbps",
+      "span": [
+        160,
+        162
+      ],
+      "value": "10"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[
+  { "event": "message_start", "session_id": "sess-01ab", "trace_id": "tr-77aa8c1d" },
+  { "event": "token", "text": "Fiber 500 costs " },
+  { "event": "token", "text": "39.99 per month." },
+  { "event": "citation", "doc_id": "doc-plans-fiber500-v2#c3", "entity_ids": ["plan-fiber-500"] },
+  { "event": "message_end", "finish_reason": "complete" }
+]

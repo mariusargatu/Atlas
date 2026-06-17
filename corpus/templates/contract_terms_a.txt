@@ -1,0 +1,16 @@
+# Contract Terms: {customer_name}
+
+Reference: {name}
+
+This document confirms the contract terms on record for {customer_name}.
+
+Contract length: {contract_months} months
+Effective vintage: {vintage_year}
+
+## Early termination
+
+If this contract is cancelled early, the Early Termination Fee of
+{termination_fee_amount} applies.
+
+These terms supersede any pricing or contract information shown on current
+plan pages.

@@ -1,0 +1,55 @@
+{
+  "doc_id": "doc-plan_page-plan-fiber-100--region-central",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-fiber-100--region-central:name",
+      "span": [
+        2,
+        11
+      ],
+      "value": "Fiber 100"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-central:download_mbps",
+      "span": [
+        34,
+        37
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-central:upload_mbps",
+      "span": [
+        48,
+        51
+      ],
+      "value": "100"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-central:monthly_price",
+      "span": [
+        90,
+        95
+      ],
+      "value": "31.99"
+    },
+    {
+      "clause": "No contract. Cancel any time.",
+      "fact_ref": "plan-fiber-100--region-central:contract_months",
+      "span": [
+        150,
+        179
+      ],
+      "value": "0"
+    },
+    {
+      "fact_ref": "plan-fiber-100--region-central:region",
+      "span": [
+        113,
+        127
+      ],
+      "value": "region-central"
+    }
+  ]
+}

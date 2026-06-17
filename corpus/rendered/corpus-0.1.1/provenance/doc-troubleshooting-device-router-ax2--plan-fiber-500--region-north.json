@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-troubleshooting-device-router-ax2--plan-fiber-500--region-north",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-router-ax2:name",
+      "span": [
+        19,
+        29
+      ],
+      "value": "Router AX2"
+    },
+    {
+      "fact_ref": "device-router-ax2:firmware_version",
+      "span": [
+        232,
+        237
+      ],
+      "value": "1.4.2"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:name",
+      "span": [
+        84,
+        93
+      ],
+      "value": "Fiber 500"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:monthly_price",
+      "span": [
+        142,
+        147
+      ],
+      "value": "38.99"
+    },
+    {
+      "fact_ref": "plan-fiber-500--region-north:region",
+      "span": [
+        165,
+        177
+      ],
+      "value": "region-north"
+    }
+  ]
+}
