@@ -1,0 +1,52 @@
+{
+  "name": "@atlas/web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "codegen": "openapi-typescript ./openapi.json -o ./src/api/generated/types.ts",
+    "knip": "knip"
+  },
+  "dependencies": {
+    "@assistant-ui/react": "^0.7.91",
+    "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.95.0",
+    "clsx": "^2.1.1",
+    "openapi-fetch": "^0.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.49.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react-swc": "^3.7.2",
+    "fishery": "^2.2.3",
+    "jsdom": "^25.0.1",
+    "knip": "^5.39.0",
+    "msw": "^2.6.8",
+    "openapi-typescript": "^7.4.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  }
+}

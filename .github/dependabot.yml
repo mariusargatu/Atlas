@@ -1,0 +1,19 @@
+# Recheck-on-a-schedule for the same reason the eval harness recalibrates on a schedule: a pinned
+# action tag or dependency version is a hardcoded assumption, and hardcoded assumptions go stale on
+# the vendor's calendar, not ours (a Trivy action pin and a pnpm/action-setup requirement broke CI
+# this way with no code change on our side). Weekly PRs turn that into a diff to review, not a
+# midnight failure to debug.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
