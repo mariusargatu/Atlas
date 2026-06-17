@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["tests-e2e/**/*.spec.ts"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": ["src/api/generated/**"],
+  "ignoreDependencies": ["tailwindcss"]
+}

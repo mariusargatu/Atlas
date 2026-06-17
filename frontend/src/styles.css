@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Design tokens surface as CSS vars (mirrors tokens-as-TS in src/ui/tokens). Tailwind v4 reads
+   the @theme block; the TS token objects are the typed source these are generated from. */
+@theme {
+  --color-bg: #0b0f17;
+  --color-surface: #131a26;
+  --color-border: #243043;
+  --color-text: #e6edf6;
+  --color-muted: #9fb0c6;
+  --color-primary: #4f8cff;
+  --color-danger: #ff6b6b;
+  --color-warn: #ffb454;
+  --radius-md: 0.5rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}

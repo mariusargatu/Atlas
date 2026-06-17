@@ -1,0 +1,29 @@
+# Git guardrails for the whole repo. Frontend checks scope to frontend; Python to the backend.
+# Replaces Husky + lint-staged + commitlint with one fast, staged only pass (learnings KEEP).
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      root: frontend/
+      glob: "*.{ts,tsx,json}"
+      run: pnpm biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+    typecheck-web:
+      root: frontend/
+      glob: "frontend/**/*.{ts,tsx}"
+      run: pnpm -C frontend typecheck
+
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        head -1 "{1}" | grep -Eq '^(feat|fix|refactor|docs|test|chore|perf|ci)(\(.+\))?!?: .+' \
+          || { echo "commit message must be conventional: <type>: <desc>"; exit 1; }
+
+pre-push:
+  parallel: true
+  commands:
+    web-test:
+      root: frontend/
+      run: pnpm test
+    backend-test:
+      run: task test

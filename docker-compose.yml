@@ -1,0 +1,31 @@
+# The whole Atlas app in two containers: the FastAPI edge + the nginx served SPA.
+#   docker compose up --build          # replay mode, zero keys, zero egress
+#   ATLAS_MODE=live docker compose up --build   # live, answers anything via host Ollama
+# Open http://localhost:8080.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ATLAS_MODE: ${ATLAS_MODE:-replay} # replay | live
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-ollama}
+      MODEL_ID: ${MODEL_ID:-qwen2.5:7b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # reach an Ollama daemon on the host
+    expose:
+      - "8000"
+    ports:
+      - "8000:8000" # also exposed directly for debugging / curl
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
