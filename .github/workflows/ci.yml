@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# The hermetic PR lane. No API keys are provided and the `record` dependency group is not
+# installed, so there is no provider client to make a live call — a cassette miss hard-fails
+# instead. The matrix runs the SAME committed cassettes on x86_64 (ubuntu) and arm64 (macOS):
+# if a run is not byte-stable across architectures, the determinism thesis is broken and this
+# job is the place it fails loudly.
+jobs:
+  hermetic-pr-lane:
+    name: hermetic PR lane (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the deterministic, replayed suite (no keys, no live calls)
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          OMP_NUM_THREADS: "1"
+        run: uv run pytest -q
+
+      - name: Re-run to prove byte-stability (a flake here means broken determinism)
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          OMP_NUM_THREADS: "1"
+        run: uv run pytest -q
+
+  # The frontend deterministic gate. Generated API client must match the OpenAPI contract (drift
+  # fails the build — the single-source-of-truth invariant, ADR-028).
+  web-gate:
+    name: web gate (lint · typecheck · test · knip · build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: codegen drift (generated client must equal the committed contract)
+        run: pnpm -C frontend codegen && git diff --exit-code frontend/src/api/generated
+      - run: pnpm -C frontend lint
+      - run: pnpm -C frontend typecheck
+      - run: pnpm -C frontend test
+      - run: pnpm -C frontend knip
+      - run: pnpm -C frontend build
+
+  # End-to-end against the REPLAYED backend (atlas.server, committed cassettes) — no keys, no live
+  # calls. Playwright boots Vite via its webServer; this job boots the FastAPI edge on :8000.
+  e2e:
+    name: e2e (Playwright · replay backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C frontend exec playwright install --with-deps chromium
+      - name: Boot the replay backend on :8000
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          OMP_NUM_THREADS: "1"
+          PYTHONPATH: backend:testing/harness:.
+        run: |
+          uv run uvicorn atlas.server:app --port 8000 &
+          for _ in $(seq 1 30); do curl -sf localhost:8000/openapi.json >/dev/null && break; sleep 1; done
+      - name: Run Playwright (Vite started by its webServer)
+        run: pnpm -C frontend e2e
+
+  # Security scanning is cheap insurance (learnings KEEP). Trivy FS for deps/secrets; CodeQL lives
+  # in codeql.yml.
+  security:
+    name: security (Trivy FS)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif

@@ -1,0 +1,25 @@
+{
+  "model_id": "claude-test",
+  "request": {
+    "messages": [
+      {
+        "content": "Switch me to the fast plan",
+        "type": "human"
+      }
+    ],
+    "model_id": "claude-test"
+  },
+  "response": {
+    "content": "",
+    "tool_calls": [
+      {
+        "args": {
+          "plan_id": "plan_current_fast"
+        },
+        "id": "c1",
+        "name": "change_plan"
+      }
+    ]
+  },
+  "version": 1
+}

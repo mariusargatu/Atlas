@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+.coverage
+*.egg-info/
+.env
+.DS_Store
+uv.lock.tmp
+
+# tool / session artifacts (never part of the repo)
+.playwright-mcp/
+.mutmut-cache
+/*.png        # stray root screenshots from local verification runs
+
+# frontend (frontend)
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/

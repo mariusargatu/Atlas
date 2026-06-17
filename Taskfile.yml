@@ -1,0 +1,82 @@
+# Atlas, single entrypoint (Task · https://taskfile.dev). The PR lane (`task test`) needs NO keys
+# and NO network. The determinism env is pinned globally so a clone reproduces byte for byte
+# (ADR-007). Run `task --list` to see everything.
+version: '3'
+
+env:
+  TZ: UTC
+  LC_ALL: C
+  PYTHONHASHSEED: '0'
+  OMP_NUM_THREADS: '1'
+  PYTHONPATH: backend:testing/harness:.
+
+tasks:
+  install:
+    desc: Sync the Python toolchain (uv).
+    cmds:
+      - uv sync
+
+  up:
+    desc: (no op) the v0.1 spine needs no external infra.
+    cmds:
+      - echo "v0.1 spine needs no external infra. Run 'task test'."
+
+  test:
+    desc: Hermetic, deterministic regression lane, byte stable, no keys, no network.
+    cmds:
+      - uv run pytest -q
+
+  cov:
+    desc: Honest coverage over CI reachable code (omit list lives in pyproject [tool.coverage]).
+    cmds:
+      - uv run pytest -q --cov --cov-report=term-missing
+
+  record:
+    desc: Capture new cassettes against live models (needs keys; not the PR lane).
+    env:
+      RECORD: '1'
+    cmds:
+      - uv run pytest -q
+
+  record-demo:
+    desc: Prove record → replay against a live provider (default local Ollama).
+    cmds:
+      - uv run --group ollama python testing/harness/record_turn.py
+
+  record-atlas:
+    desc: Record the real Atlas cold open cassette (replayed by testing/tests/test_recorded_turns.py).
+    cmds:
+      - uv run --group ollama python testing/harness/record_atlas_cassettes.py
+
+  seed-e2e:
+    desc: Regenerate the committed cassettes the Playwright E2E lane replays.
+    cmds:
+      - uv run python testing/harness/seed_e2e_cassettes.py
+
+  serve-e2e:
+    desc: Serve the product API against the replayed gateway (no keys, no live calls), the E2E backend.
+    cmds:
+      - uv run uvicorn atlas.server:app --port 8000
+
+  web-test:
+    desc: The frontend deterministic gate (mirrors the web CI job).
+    dir: frontend
+    cmds:
+      - pnpm install --frozen-lockfile
+      - pnpm codegen
+      - git diff --exit-code src/api/generated
+      - pnpm lint
+      - pnpm typecheck
+      - pnpm test
+      - pnpm knip
+      - pnpm build
+
+  eval:
+    desc: nightly eval lane (scored, with CIs), P5+.
+    cmds:
+      - echo "nightly eval lane (scored, with CIs), P5+."
+
+  redteam:
+    desc: red team lane (OWASP/ATLAS), P8+.
+    cmds:
+      - echo "red team lane (OWASP/ATLAS), P8+."
