@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-from determinism import FrozenClock
+from determinism.sources import FrozenClock
 
 from atlas.auth import issue_token
 from atlas.edge_app import make_app

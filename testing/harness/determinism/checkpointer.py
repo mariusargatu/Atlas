@@ -3,7 +3,7 @@
 LangGraph mints the checkpoint id and `ts` itself (a `BaseCheckpointSaver` only stores what
 it is handed), so the determinism decision is **exclude everywhere**: use a fresh in memory
 saver per test and never hash or assert on `checkpoint_id`/`ts`. Trajectory tests assert on
-content (the action result, the trace tree), which is deterministic; the engine's ids stay
+content (the action result, the trace tree), which is deterministic. The engine's ids stay
 out of every digest. This is robust across LangGraph versions, unlike monkeypatching the id
 source.
 """

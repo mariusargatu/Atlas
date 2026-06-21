@@ -5,15 +5,14 @@ same path the gateway reads, replacing six near identical `_seed` helpers that h
 the graph/app tests. One helper, one contract, exercised by the writer it documents.
 
 The hypothesis profile is derandomized so property tests reproduce exactly like the rest of the
-regression lane. Variance is the eval lane's job (live model); the PR lane never flickers.
+regression lane. Variance is the eval lane's job (live model). The PR lane never flickers.
 """
 from __future__ import annotations
 
 import pytest
 from hypothesis import settings
 
-from cassette import Cassette, build_request
-from cassette_store import FileCassetteStore
+from replay.cassette_store import seed_cassette as _seed_cassette
 
 from atlas.domain import accounts
 
@@ -31,12 +30,6 @@ def _reset_account_state():
 
 @pytest.fixture
 def seed_cassette():
-    """Return a `seed(cassette_dir, messages, response, model_id="claude-test")` that commits a
-    replayable cassette under its content addressed key."""
-
-    def _seed(cassette_dir, messages, response, model_id: str = "claude-test") -> None:
-        FileCassetteStore(cassette_dir).save(
-            Cassette(model_id=model_id, request=build_request(model_id, messages), response=response)
-        )
-
-    return _seed
+    """Return the shared `seed(cassette_dir, messages, response, model_id="claude-test")` that commits
+    a replayable cassette under its content addressed key (replay.cassette_store.seed_cassette)."""
+    return _seed_cassette

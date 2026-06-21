@@ -1,7 +1,7 @@
 """Record a REAL Atlas turn against a live provider (default: local Ollama), committed for replay.
 
 The cold open answer path: feed a real model the (current, term free) plan page and the customer's
-contract question. A confident model answers "contract-free, no fee", grounded in the page, TRUE
+contract question. A confident model answers "contract free, no fee", grounded in the page, TRUE
 for a current customer, FALSE for the legacy customer whose term lives in the account. The render
 guard catches it against the oracle. This is the north star with a real model in the loop, captured
 once and replayed forever (Ollama is not byte stable live: replay is the determinism, not Ollama).
@@ -16,10 +16,10 @@ import pathlib
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory
-from gateway import GatewayChatModel
-from models import build_chat_model, provider_tag
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
+from replay.gateway import GatewayChatModel
+from replay.providers import build_chat_model, provider_tag
 
 from atlas.domain.actions import ActionsBackend
 from atlas.domain.corpus import CORPUS

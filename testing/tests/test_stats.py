@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from stats import intervals_overlap, wilson_interval
+from evals.stats import intervals_overlap, wilson_interval
 
 
 def test_close_scores_have_overlapping_intervals():

@@ -1,12 +1,12 @@
 """The actions MCP server (the write surface). Bound to the signed in customer at connect, so
-`customer_id` is never a tool argument. The write tools only *propose*; the confirmation
+`customer_id` is never a tool argument. The write tools only *propose*. The confirmation
 interrupt in the graph is what executes them. That gate is upstream, not in the tool.
 """
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from canonical import serialize_tool_result
+from determinism.canonical import serialize_tool_result
 
 
 def build_actions_server(customer_id: str) -> FastMCP:

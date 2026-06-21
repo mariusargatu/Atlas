@@ -1,7 +1,7 @@
 """Cassette store behaviour: both adapters, including the cases mutation testing exposed.
 
 The in memory store must KEEP every cassette (an earlier 'replace the dict' bug would have served
-the wrong recording the moment a second cassette was saved); the file store must name the file when
+the wrong recording the moment a second cassette was saved). The file store must name the file when
 a recording is corrupt, because 'one bad file among hundreds' is the painful debugging case.
 """
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import HumanMessage
 
-from cassette import Cassette, build_request
-from cassette_store import FileCassetteStore, InMemoryCassetteStore
+from replay.cassette import Cassette, build_request
+from replay.cassette_store import FileCassetteStore, InMemoryCassetteStore
 
 
 def _cassette(text: str, content: str) -> Cassette:

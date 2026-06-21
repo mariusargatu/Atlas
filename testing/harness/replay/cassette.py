@@ -19,9 +19,9 @@ from typing import Any, Sequence
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from canonical import REQUEST_ALLOW, REQUEST_STRUCTURAL, request_digest
+from determinism.canonical import REQUEST_ALLOW, REQUEST_STRUCTURAL, request_digest
 
-#: Bumped only on a breaking change to the on disk shape; `from_dict` stays tolerant of older bodies.
+#: Bumped only on a breaking change to the on disk shape. `from_dict` stays tolerant of older bodies.
 CASSETTE_VERSION = 1
 
 #: Caller supplied kwargs allowed to shape a cassette (and therefore its key). DERIVED from
@@ -106,7 +106,7 @@ class Cassette:
         """Rehydrate the recorded response into the `ChatResult` the graph expects (replay mode).
 
         Only `content` and `tool_calls` are persisted (see `from_result`), which is everything the
-        graph routes on; `AIMessage` defaults the rest, so we do not read fields we never wrote."""
+        graph routes on, and `AIMessage` defaults the rest, so we do not read fields we never wrote."""
         message = AIMessage(
             content=self.response.get("content", ""),
             tool_calls=self.response.get("tool_calls", []),

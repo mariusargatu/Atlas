@@ -10,10 +10,10 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
-from canonical import serialize_tool_result
-from checkpointer import new_checkpointer
-from determinism import IdFactory
-from gateway import GatewayChatModel
+from determinism.canonical import serialize_tool_result
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
+from replay.gateway import GatewayChatModel
 
 from atlas.domain.actions import ActionsBackend
 from atlas.orchestration.atlas_graph import build_atlas_graph
@@ -124,7 +124,7 @@ async def test_act_path_writes_through_to_account_state(tmp_path, seed_cassette)
 async def test_write_then_read_turn_reflects_the_new_plan(tmp_path, seed_cassette):
     """Two turns on one store: turn 1 confirms change_plan, turn 2 reads the account and the answer
     reflects the new plan, read after write through the full graph, not just the backend."""
-    from canonical import serialize_tool_result
+    from determinism.canonical import serialize_tool_result
     from atlas.domain import accounts
     from atlas.domain.accounts import apply_write
     from atlas.domain.catalog import get_plan
@@ -171,7 +171,7 @@ async def test_write_tool_is_unreachable_on_a_non_action_turn(tmp_path, seed_cas
 
 @pytest.mark.asyncio
 async def test_read_tool_is_unreachable_on_a_policy_turn(tmp_path, seed_cassette):
-    """A policy question turn binds knowledge + catalog only; an account read is unreachable."""
+    """A policy question turn binds knowledge + catalog only, so an account read is unreachable."""
     user = HumanMessage("What are your opening hours?")
     seed_cassette(tmp_path, [user], {"content": "", "tool_calls": [{"name": "get_account_summary", "args": {}, "id": "r9"}]})
     graph = _graph(tmp_path, ActionsBackend(IdFactory("ref")))
@@ -250,7 +250,7 @@ async def test_read_path_answers_from_the_account(tmp_path, seed_cassette):
 async def test_read_path_answers_the_bill_from_the_account(tmp_path, seed_cassette):
     """A get_bill read routes through tools_read to the session scoped account server and the agent
     answers from it, the four account reads flow through the graph, not just the summary."""
-    from canonical import serialize_tool_result
+    from determinism.canonical import serialize_tool_result
     from atlas.domain import accounts
 
     user = HumanMessage("What's my bill this month?")

@@ -9,8 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from canonical import canonical_json, digest, request_digest, serialize_tool_result
-from determinism import FrozenClock, IdFactory, SeededRng, SpanSequence, fixture_kit
+from determinism.canonical import canonical_json, digest, request_digest, serialize_tool_result
+from determinism.sources import FrozenClock, IdFactory, SeededRng, SpanSequence, fixture_kit
 
 
 # --- canonicalization is stable and order independent ---

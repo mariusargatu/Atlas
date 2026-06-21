@@ -63,8 +63,14 @@ series; the design chapters and ADRs live in the companion series workspace, not
 backend/atlas/   the agent (the product, hexagonal: domain · ports · adapters · orchestration · mcp_servers)
 frontend/        the Vite SPA (typed client generated from the OpenAPI contract)
 testing/         everything that proves the product works
-  harness/       the test rig: gateway (record/replay), faked backends, canonical digest, tracing, stats
-  tests/         23 test modules, the suite that gates every merge
+  harness/       the test rig, grouped by role (read the folders in this order):
+    determinism/   pin every non-reproducible source + the canonical digest everything is keyed by
+    replay/        record the model once, replay forever (gateway · cassette · store · providers)
+    tracing/       the span tree each turn emits — the thing the graders read
+    evals/         grade the agent: stats · evalkit · drift · inference_oracle (backend must NOT import this)
+    recording/     operator scripts that capture new cassettes against a live model (need keys)
+    cassettes/     committed recorded model responses the lanes replay (data, not code)
+  tests/         the suite that gates every merge
 ```
 
 > The series' design docs and ADRs (system map, principles, test architecture, oracles) live in the

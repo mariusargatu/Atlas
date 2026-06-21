@@ -8,7 +8,7 @@ generated space (hypothesis, derandomized in conftest so the lane stays reproduc
 golden values that nail the arithmetic itself.
 
 The canonical block is *metamorphic*: it asserts relations between inputs and outputs (reorder the
-keys → identical digest; add an unlisted field → identical digest; change a listed field → digest
+keys → identical digest, add an unlisted field → identical digest, change a listed field → digest
 moves) rather than memorised outputs. Those relations ARE the cassette key contract.
 """
 from __future__ import annotations
@@ -18,8 +18,8 @@ import math
 from hypothesis import given
 from hypothesis import strategies as st
 
-from canonical import REQUEST_ALLOW, canonical_json, digest, request_digest
-from stats import cohen_kappa, wilson_interval
+from determinism.canonical import REQUEST_ALLOW, canonical_json, digest, request_digest
+from evals.stats import cohen_kappa, wilson_interval
 
 # JSON ish values with str keys (canonical sorts dict items by key, so keys must be comparable).
 _json = st.recursive(

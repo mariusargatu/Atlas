@@ -51,10 +51,11 @@ testpaths = ["testing/tests"]
 branch = true
 source = ["testing/harness", "backend/atlas"]
 omit = [
-    "testing/harness/record_turn.py",
-    "testing/harness/record_atlas_cassettes.py",
-    "testing/harness/seed_e2e_cassettes.py",
-    "testing/harness/models.py",                          # provider factory, record/eval lanes only
+    "testing/harness/recording/*",                        # operator entrypoints, capture cassettes (need keys)
+    "testing/harness/replay/providers.py",                # provider factory, record/eval lanes only
+    "testing/harness/evals/evalkit/__main__.py",          # eval lane demo entrypoint (task eval), operator-run
+    "testing/harness/evals/drift/__main__.py",            # drift lane demo entrypoint (task drift), operator-run
+    "testing/harness/evals/inference_oracle/__main__.py", # differential oracle demo (task oracle), operator-run
     "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
     "backend/atlas/ports/*",                     # Protocol definitions, signatures, not behaviour
 ]

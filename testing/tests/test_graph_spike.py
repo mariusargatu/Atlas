@@ -9,7 +9,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from atlas.orchestration.spike_graph import build_graph
-from gateway import GatewayChatModel
+from replay.gateway import GatewayChatModel
 
 _ANSWER = "Your account is on a legacy plan with a 12-month term."
 

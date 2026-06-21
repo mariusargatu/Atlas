@@ -1,4 +1,4 @@
-"""The knowledge MCP server (RAG). `search_knowledge` over the injected retriever; passages are
+"""The knowledge MCP server (RAG). `search_knowledge` over the injected retriever. Passages are
 returned as DATA, never executed. Identity is irrelevant here (help docs are public), which is
 why this is its own server, separate from the account oracle.
 """
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from canonical import serialize_tool_result
+from determinism.canonical import serialize_tool_result
 
 
 def build_knowledge_server(retriever) -> FastMCP:
