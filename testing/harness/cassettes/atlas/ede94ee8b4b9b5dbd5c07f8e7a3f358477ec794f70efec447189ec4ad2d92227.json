@@ -1,0 +1,21 @@
+{
+  "model_id": "ollama:qwen2.5:7b",
+  "request": {
+    "messages": [
+      {
+        "content": "You are Atlas, a broadband support agent. Answer the customer's question directly and confidently using only the plan page provided. State plainly whether the plan has a contract or minimum term and whether there is any cancellation or early-termination fee.",
+        "type": "system"
+      },
+      {
+        "content": "Plan page:\nOur current Fast plan is contract-free, with no minimum term, you can cancel any time, and there is no early-termination fee. Data is unlimited.\n\nQuestion: Is my plan contract-free, and can I cancel with no fee?",
+        "type": "human"
+      }
+    ],
+    "model_id": "ollama:qwen2.5:7b"
+  },
+  "response": {
+    "content": "Yes, your plan is contract-free and you can cancel at any time without any cancellation or early-termination fees.",
+    "tool_calls": []
+  },
+  "version": 1
+}

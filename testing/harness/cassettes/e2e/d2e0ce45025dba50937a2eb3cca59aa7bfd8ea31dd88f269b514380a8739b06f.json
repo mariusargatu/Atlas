@@ -1,0 +1,25 @@
+{
+  "model_id": "claude-test",
+  "request": {
+    "messages": [
+      {
+        "content": "What is your name?",
+        "type": "human"
+      },
+      {
+        "content": "I'm Atlas, your broadband support assistant.",
+        "type": "ai"
+      },
+      {
+        "content": "Can you say that again please?",
+        "type": "human"
+      }
+    ],
+    "model_id": "claude-test"
+  },
+  "response": {
+    "content": "Sure, I'm Atlas, your broadband support assistant, glad to help again.",
+    "tool_calls": []
+  },
+  "version": 1
+}

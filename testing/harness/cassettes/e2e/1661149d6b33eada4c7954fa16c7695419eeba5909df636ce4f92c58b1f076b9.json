@@ -1,0 +1,17 @@
+{
+  "model_id": "claude-test",
+  "request": {
+    "messages": [
+      {
+        "content": "What is your name?",
+        "type": "human"
+      }
+    ],
+    "model_id": "claude-test"
+  },
+  "response": {
+    "content": "I'm Atlas, your broadband support assistant.",
+    "tool_calls": []
+  },
+  "version": 1
+}

@@ -1,0 +1,25 @@
+{
+  "model_id": "claude-test",
+  "request": {
+    "messages": [
+      {
+        "content": "My router light is blinking orange, what do I do?",
+        "type": "human"
+      }
+    ],
+    "model_id": "claude-test"
+  },
+  "response": {
+    "content": "",
+    "tool_calls": [
+      {
+        "args": {
+          "query": "router light blinks orange restart power button"
+        },
+        "id": "k1",
+        "name": "search_knowledge"
+      }
+    ]
+  },
+  "version": 1
+}

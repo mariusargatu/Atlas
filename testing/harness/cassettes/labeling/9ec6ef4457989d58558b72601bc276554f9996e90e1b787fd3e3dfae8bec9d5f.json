@@ -1,0 +1,25 @@
+{
+  "model_id": "claude-test",
+  "request": {
+    "messages": [
+      {
+        "content": "Is my plan contract-free?",
+        "type": "human"
+      }
+    ],
+    "model_id": "claude-test"
+  },
+  "response": {
+    "content": "",
+    "tool_calls": [
+      {
+        "args": {
+          "query": "plan contract-free minimum term early-termination fee"
+        },
+        "id": "k1",
+        "name": "search_knowledge"
+      }
+    ]
+  },
+  "version": 1
+}
