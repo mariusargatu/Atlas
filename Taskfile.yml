@@ -36,22 +36,22 @@ tasks:
     env:
       RECORD: '1'
     cmds:
-      - uv run pytest -q
+      - uv run --all-groups pytest -q
 
   record-demo:
-    desc: Prove record → replay against a live provider (default local Ollama).
+    desc: Prove record → replay against a live provider (MODEL_PROVIDER in .env; default local Ollama).
     cmds:
-      - uv run --group ollama python testing/harness/record_turn.py
+      - uv run --all-groups python testing/harness/recording/record_turn.py
 
   record-atlas:
     desc: Record the real Atlas cold open cassette (replayed by testing/tests/test_recorded_turns.py).
     cmds:
-      - uv run --group ollama python testing/harness/record_atlas_cassettes.py
+      - uv run --all-groups python testing/harness/recording/record_atlas_cassettes.py
 
   seed-e2e:
     desc: Regenerate the committed cassettes the Playwright E2E lane replays.
     cmds:
-      - uv run python testing/harness/seed_e2e_cassettes.py
+      - uv run python testing/harness/recording/seed_e2e_cassettes.py
 
   serve-e2e:
     desc: Serve the product API against the replayed gateway (no keys, no live calls), the E2E backend.
@@ -72,11 +72,21 @@ tasks:
       - pnpm build
 
   eval:
-    desc: nightly eval lane (scored, with CIs), P5+.
+    desc: eval lane (multi-trial, scored, with Wilson CIs). REPLAY demo here; LIVE nightly is P5+.
     cmds:
-      - echo "nightly eval lane (scored, with CIs), P5+."
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.evalkit
 
   redteam:
     desc: red team lane (OWASP/ATLAS), P8+.
     cmds:
       - echo "red team lane (OWASP/ATLAS), P8+."
+
+  drift:
+    desc: drift lane (spike) — diff DECISIONS old-vs-new behind a stable request key. REPLAY demo; live shadow re-record deferred.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.drift
+
+  oracle:
+    desc: differential oracle (spike) — grade inference-truth via two independent derivations, not a stored column.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.inference_oracle

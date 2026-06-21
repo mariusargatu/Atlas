@@ -3,15 +3,15 @@
 `uv run uvicorn atlas.server:app` serves the chat + auth edge against the REPLAYED gateway and the
 in memory actions backend, no keys, no live calls. This is what the Playwright E2E lane boots:
 deterministic, byte stable, safe to drive a thousand times. The cassettes for the E2E prompts live
-under `testing/harness/cassettes/e2e/` (see `testing/harness/seed_e2e_cassettes.py`).
+under `testing/harness/cassettes/e2e/` (see `testing/harness/recording/seed_e2e_cassettes.py`).
 """
 from __future__ import annotations
 
 import os
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory, fixture_kit
-from gateway import GatewayChatModel
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory, fixture_kit
+from replay.gateway import GatewayChatModel
 
 from atlas.chat_app import make_chat_app
 from atlas.domain.accounts import apply_write
@@ -29,7 +29,7 @@ _MODE = os.environ.get("ATLAS_MODE", "replay")
 def _gateway():
     if _MODE == "replay":
         return GatewayChatModel(model_id="claude-test", cassette_dir=_CASSETTES, mode="replay")
-    from models import build_chat_model, provider_tag
+    from replay.providers import build_chat_model, provider_tag
 
     return GatewayChatModel(model_id=provider_tag(), cassette_dir=_CASSETTES, mode=_MODE, inner=build_chat_model())
 

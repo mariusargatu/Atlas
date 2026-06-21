@@ -3,7 +3,7 @@
 1. RECORD: wrap the chosen provider in the gateway, run one real turn, save a cassette.
 2. REPLAY: rebuild the gateway in replay mode (no provider), run the same turn, assert byte equal.
 
-This is the loop the whole suite rests on: a live model (Ollama here) is captured once; every CI run
+This is the loop the whole suite rests on: a live model (Ollama here) is captured once, and every CI run
 afterwards replays the cassette with zero egress. Ollama is not byte stable live, which is exactly
 why we replay. Run with `task record-demo` (needs a running Ollama daemon + a pulled chat model).
 """
@@ -14,8 +14,8 @@ import tempfile
 
 from langchain_core.messages import HumanMessage
 
-from gateway import GatewayChatModel
-from models import build_chat_model, provider_tag
+from replay.gateway import GatewayChatModel
+from replay.providers import build_chat_model, provider_tag
 
 from atlas.orchestration.spike_graph import build_graph
 

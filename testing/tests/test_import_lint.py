@@ -20,6 +20,12 @@ FORBIDDEN_TOPLEVEL = {
 # Outer rings a pure layer must not depend on (dependencies point inward only).
 FORBIDDEN_ATLAS_PREFIXES = ("atlas.orchestration", "atlas.adapters", "atlas.mcp_servers")
 
+# The two-harness seam (03-the-harness.md, property 5): the agent harness is the product and must
+# never import the eval harness. The eval harness reads the agent through its ports; the dependency
+# is one way. A backend import of `evals` (the lane package: evalkit/drift/inference_oracle) or any
+# `testing.*` would wire the test rig into the runtime, the conflation the article warns about.
+FORBIDDEN_EVAL_TOPLEVEL = ("evals", "evalkit", "drift", "inference_oracle", "testing")
+
 
 def _imports(path: pathlib.Path):
     tree = ast.parse(path.read_text(), filename=str(path))
@@ -34,6 +40,10 @@ def _imports(path: pathlib.Path):
 def _pure_files():
     for layer in PURE_LAYERS:
         yield from (ROOT / layer).rglob("*.py")
+
+
+def _backend_files():
+    yield from (ROOT / "backend/atlas").rglob("*.py")
 
 
 def test_pure_layers_import_no_framework_or_client():
@@ -52,3 +62,13 @@ def test_pure_layers_do_not_import_outer_rings():
             if module.startswith(FORBIDDEN_ATLAS_PREFIXES):
                 violations.append(f"{path.relative_to(ROOT)}:{lineno} imports {module}")
     assert not violations, "pure layer depends on an outer ring (deps must point inward):\n" + "\n".join(violations)
+
+
+def test_agent_harness_never_imports_the_eval_harness():
+    """The product must not import the test rig (the two-harness seam, property 5)."""
+    violations = []
+    for path in _backend_files():
+        for module, lineno in _imports(path):
+            if module.split(".")[0] in FORBIDDEN_EVAL_TOPLEVEL:
+                violations.append(f"{path.relative_to(ROOT)}:{lineno} imports {module}")
+    assert not violations, "agent harness leaked an eval-harness import:\n" + "\n".join(violations)

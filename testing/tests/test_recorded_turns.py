@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory
-from gateway import GatewayChatModel
-from record_atlas_cassettes import OUT, cold_open_messages
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
+from replay.gateway import GatewayChatModel
+from recording.record_atlas_cassettes import OUT, cold_open_messages
 
 from atlas.domain.actions import ActionsBackend
 from atlas.orchestration.atlas_graph import build_atlas_graph

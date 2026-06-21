@@ -32,8 +32,9 @@ dependency group is not installed, so a cassette miss hard fails instead of goin
   framework/client imports, no dependency on outer rings (`testing/tests/test_import_lint.py`). Don't
   suggest importing LangGraph/MCP into the domain.
 - **Determinism is a contract.** No wall clock, no `random`, no unordered iteration in runtime
-  paths; time/ids come from injected factories (`testing/harness/determinism.py`). The cassette key is a
-  canonical digest (`testing/harness/canonical.py`). Changing canonicalization invalidates cassettes.
+  paths; time/ids come from injected factories (`testing/harness/determinism/sources.py`). The cassette key
+  is a canonical digest (`testing/harness/determinism/canonical.py`). Changing canonicalization invalidates
+  cassettes.
 - **Identity never comes from the model.** `customer_id` is from the session/bearer token, never a
   tool argument. Flag any change that puts it in a tool schema.
 - **The guard is fail closed**; binding makes unauthorized tools *unreachable*, not merely denied.

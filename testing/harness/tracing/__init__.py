@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping, Optional, Protocol
 
-from determinism import SpanSequence
+from determinism.sources import SpanSequence
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,24 @@ class Span:
     kind: str                       # "turn" | "llm" | "tool" | "guard" | "node"
     parent: Optional[int]
     attributes: Mapping             # read only view (MappingProxyType), frozen in value, not just field
+
+
+# ---- span decoders (the one definition of "tools called" / "guard verdicts") ----
+# Free functions over any span sequence, so a reader of a recorded trace (e.g. the drift lane's
+# DecisionRecord) and the live InMemoryTracer share ONE definition of the trajectory: a renamed
+# kind or a dedup rule changes here, never in two places that can silently disagree.
+def spans_of_kind(spans, kind: str) -> list["Span"]:
+    return [s for s in spans if s.kind == kind]
+
+
+def tool_names(spans) -> list[str]:
+    """The trajectory: tool-span names in call order."""
+    return [s.name for s in spans_of_kind(spans, "tool")]
+
+
+def guard_outcomes(spans) -> list[tuple[str, bool]]:
+    """(guard_name, ok) per guard span, in order. ok defaults False when a span is unannotated."""
+    return [(s.name, bool(s.attributes.get("ok"))) for s in spans_of_kind(spans, "guard")]
 
 
 class Tracer(Protocol):
@@ -71,14 +89,17 @@ class InMemoryTracer:
         return [self._spans[s] for s in self._order]
 
     def of_kind(self, kind: str) -> list[Span]:
-        return [s for s in self.spans if s.kind == kind]
+        return spans_of_kind(self.spans, kind)
 
     def tool_order(self) -> list[str]:
         """The trajectory: tool names in the order they were called."""
-        return [s.name for s in self.of_kind("tool")]
+        return tool_names(self.spans)
 
     def guard_verdicts(self) -> list[Span]:
         return self.of_kind("guard")
 
 
-__all__ = ["InMemoryTracer", "NullTracer", "Span", "Tracer"]
+__all__ = [
+    "InMemoryTracer", "NullTracer", "Span", "Tracer",
+    "spans_of_kind", "tool_names", "guard_outcomes",
+]

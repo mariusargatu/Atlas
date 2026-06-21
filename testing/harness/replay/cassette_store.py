@@ -1,6 +1,6 @@
 """Cassette persistence: the store seam behind the gateway (ADR-007).
 
-The gateway is a LangChain adapter; *where* a cassette lives is a separate concern, so it lives
+The gateway is a LangChain adapter. *Where* a cassette lives is a separate concern, so it lives
 here behind a small port. `FileCassetteStore` is the committed on disk store the PR lane replays.
 `InMemoryCassetteStore` backs hermetic gateway tests with no temp directory and no I/O. The store
 is deliberately policy free: a miss returns `None` and the *gateway* decides that replay turns a
@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
-from cassette import Cassette
+from replay.cassette import Cassette, build_request
 
 
 class CassetteMiss(RuntimeError):
@@ -52,7 +52,7 @@ class FileCassetteStore:
 
     def save(self, cassette: Cassette) -> None:
         self._dir.mkdir(parents=True, exist_ok=True)
-        # sort_keys for a stable on disk diff; the body's key order never affects the digest.
+        # sort_keys for a stable on disk diff, and the body's key order never affects the digest.
         self._path(cassette.key).write_text(
             json.dumps(cassette.to_dict(), indent=2, sort_keys=True)
         )
@@ -72,4 +72,18 @@ class InMemoryCassetteStore:
         self._by_key = {**self._by_key, cassette.key: cassette}
 
 
-__all__ = ["CassetteMiss", "CassetteStore", "FileCassetteStore", "InMemoryCassetteStore"]
+def seed_cassette(cassette_dir, messages, response, model_id: str = "claude-test") -> None:
+    """Persist one cassette under its content addressed key (the seed path tests and demos share).
+
+    The single definition of "pin this model response for this request": tests use it through the
+    conftest `seed_cassette` fixture, the eval/drift demos call it directly. A change to the cassette
+    schema or the request key derivation lands here, not in each hand rolled copy.
+    """
+    FileCassetteStore(cassette_dir).save(
+        Cassette(model_id=model_id, request=build_request(model_id, messages), response=response)
+    )
+
+
+__all__ = [
+    "CassetteMiss", "CassetteStore", "FileCassetteStore", "InMemoryCassetteStore", "seed_cassette",
+]

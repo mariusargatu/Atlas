@@ -10,9 +10,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import HumanMessage
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory, fixture_kit
-from gateway import GatewayChatModel
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory, fixture_kit
+from replay.gateway import GatewayChatModel
 
 from atlas.chat_app import make_chat_app
 from atlas.domain import accounts
@@ -169,7 +169,7 @@ async def test_chat_requires_read_resume_requires_write_scope(tmp_path):
 
 @pytest.mark.asyncio
 async def test_login_is_read_only_and_step_up_elevates_for_a_write(tmp_path, seed_cassette):
-    """ADR-027 step up: the login token cannot confirm a write; a stepped up token can."""
+    """ADR-027 step up: the login token cannot confirm a write, but a stepped up token can."""
     seed_cassette(
         tmp_path, [HumanMessage("Switch me to the fast plan")],
         {"content": "", "tool_calls": [{"name": "change_plan", "args": {"plan_id": "plan_current_fast"}, "id": "c1"}]},

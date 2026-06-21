@@ -13,9 +13,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from cassette import Cassette, build_request, cassette_key
-from cassette_store import CassetteMiss, InMemoryCassetteStore
-from gateway import GatewayChatModel, GatewayMode
+from replay.cassette import Cassette, build_request, cassette_key
+from replay.cassette_store import CassetteMiss, InMemoryCassetteStore
+from replay.gateway import GatewayChatModel, GatewayMode
 
 
 def _seed(store, model_id, messages, response, **req_extra):
@@ -85,7 +85,7 @@ async def test_replay_returns_recorded_tool_calls():
 
 @pytest.mark.asyncio
 async def test_record_persists_then_replays():
-    """Record mode calls the provider and stores a cassette; the same key then replays with no provider."""
+    """Record mode calls the provider and stores a cassette. The same key then replays with no provider."""
     store = InMemoryCassetteStore()
     messages = [HumanMessage("what is a data cap?")]
     rec = GatewayChatModel(model_id="stub", store=store, mode="record", inner=_StubProvider(reply="A data cap is a limit."))
@@ -153,7 +153,7 @@ def test_stop_sequence_sync_record_does_not_crash():
 def test_request_kwargs_are_a_subset_of_the_digest_allow_list():
     """The two halves of the key contract cannot drift: every field build_request copies must be one
     the digest actually hashes, else the field would silently fall out of the key."""
-    from canonical import REQUEST_ALLOW
-    from cassette import _REQUEST_KWARGS
+    from determinism.canonical import REQUEST_ALLOW
+    from replay.cassette import _REQUEST_KWARGS
 
     assert set(_REQUEST_KWARGS) <= set(REQUEST_ALLOW)

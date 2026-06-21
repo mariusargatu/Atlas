@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from determinism import IdFactory
+from determinism.sources import IdFactory
 
 from atlas.domain import accounts
 from atlas.domain.accounts import apply_write
@@ -54,7 +54,7 @@ def test_a_distinct_action_applies_again():
 
 def test_change_plan_writes_through_and_reprices_the_bill():
     backend = _wt_backend()
-    # Daniel starts on the legacy plan (term, capped, GBP 39); move him to the current plan
+    # Daniel starts on the legacy plan (term, capped, GBP 39). Move him to the current plan
     assert accounts.get_account("cust_legacy_term").plan_id == "plan_legacy_value"
     _confirm(backend, "change_plan", {"plan_id": "plan_current_fast"}, "cust_legacy_term", "k1")
     acct = accounts.get_account("cust_legacy_term")
