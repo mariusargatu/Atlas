@@ -14,8 +14,8 @@ import tempfile
 
 from langchain_core.messages import HumanMessage
 
-from gateway import GatewayChatModel
-from models import build_chat_model, provider_tag
+from replay.gateway import GatewayChatModel
+from replay.providers import build_chat_model, provider_tag
 
 from atlas.orchestration.spike_graph import build_graph
 

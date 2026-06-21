@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import HumanMessage
 
-from cassette import Cassette, build_request
-from cassette_store import FileCassetteStore, InMemoryCassetteStore
+from replay.cassette import Cassette, build_request
+from replay.cassette_store import FileCassetteStore, InMemoryCassetteStore
 
 
 def _cassette(text: str, content: str) -> Cassette:

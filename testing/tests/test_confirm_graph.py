@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 from langgraph.types import Command
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
 
 from atlas.domain.actions import ActionsBackend
 from atlas.orchestration.confirm_graph import build_confirm_graph

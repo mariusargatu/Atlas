@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from canonical import serialize_tool_result
-from gateway import GatewayChatModel
+from determinism.canonical import serialize_tool_result
+from replay.gateway import GatewayChatModel
 
 from atlas.orchestration.turn_graph import build_turn_graph
 

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
-from cassette import Cassette
+from replay.cassette import Cassette, build_request
 
 
 class CassetteMiss(RuntimeError):
@@ -72,4 +72,18 @@ class InMemoryCassetteStore:
         self._by_key = {**self._by_key, cassette.key: cassette}
 
 
-__all__ = ["CassetteMiss", "CassetteStore", "FileCassetteStore", "InMemoryCassetteStore"]
+def seed_cassette(cassette_dir, messages, response, model_id: str = "claude-test") -> None:
+    """Persist one cassette under its content-addressed key — the seed path tests and demos share.
+
+    The single definition of "pin this model response for this request": tests use it through the
+    conftest `seed_cassette` fixture, the eval/drift demos call it directly. A change to the cassette
+    schema or the request-key derivation lands here, not in each hand-rolled copy.
+    """
+    FileCassetteStore(cassette_dir).save(
+        Cassette(model_id=model_id, request=build_request(model_id, messages), response=response)
+    )
+
+
+__all__ = [
+    "CassetteMiss", "CassetteStore", "FileCassetteStore", "InMemoryCassetteStore", "seed_cassette",
+]

@@ -13,9 +13,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from cassette import Cassette, build_request, cassette_key
-from cassette_store import CassetteMiss, InMemoryCassetteStore
-from gateway import GatewayChatModel, GatewayMode
+from replay.cassette import Cassette, build_request, cassette_key
+from replay.cassette_store import CassetteMiss, InMemoryCassetteStore
+from replay.gateway import GatewayChatModel, GatewayMode
 
 
 def _seed(store, model_id, messages, response, **req_extra):
@@ -153,7 +153,7 @@ def test_stop_sequence_sync_record_does_not_crash():
 def test_request_kwargs_are_a_subset_of_the_digest_allow_list():
     """The two halves of the key contract cannot drift: every field build_request copies must be one
     the digest actually hashes, else the field would silently fall out of the key."""
-    from canonical import REQUEST_ALLOW
-    from cassette import _REQUEST_KWARGS
+    from determinism.canonical import REQUEST_ALLOW
+    from replay.cassette import _REQUEST_KWARGS
 
     assert set(_REQUEST_KWARGS) <= set(REQUEST_ALLOW)

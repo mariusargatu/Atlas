@@ -18,8 +18,8 @@ import math
 from hypothesis import given
 from hypothesis import strategies as st
 
-from canonical import REQUEST_ALLOW, canonical_json, digest, request_digest
-from stats import cohen_kappa, wilson_interval
+from determinism.canonical import REQUEST_ALLOW, canonical_json, digest, request_digest
+from evals.stats import cohen_kappa, wilson_interval
 
 # JSON ish values with str keys (canonical sorts dict items by key, so keys must be comparable).
 _json = st.recursive(

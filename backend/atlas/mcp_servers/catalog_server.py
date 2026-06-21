@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from canonical import serialize_tool_result
+from determinism.canonical import serialize_tool_result
 
 from atlas.domain import catalog
 

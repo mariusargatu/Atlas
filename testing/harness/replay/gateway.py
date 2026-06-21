@@ -33,10 +33,10 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from pydantic import model_validator
 
-from cassette import Cassette, build_request, cassette_key
-from cassette_store import CassetteMiss, CassetteStore, FileCassetteStore
+from replay.cassette import Cassette, build_request, cassette_key
+from replay.cassette_store import CassetteMiss, CassetteStore, FileCassetteStore
 
-# Re exported so existing call sites keep `from gateway import CassetteMiss` working.
+# Re exported so existing call sites keep `from replay.gateway import CassetteMiss` working.
 __all__ = ["CassetteMiss", "GatewayChatModel", "GatewayMode"]
 
 

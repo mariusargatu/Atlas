@@ -11,8 +11,8 @@ import pathlib
 
 from langchain_core.messages import HumanMessage
 
-from cassette import Cassette, build_request
-from cassette_store import FileCassetteStore
+from replay.cassette import Cassette, build_request
+from replay.cassette_store import FileCassetteStore
 
 OUT = pathlib.Path("testing/harness/cassettes/e2e")
 _MODEL_ID = "claude-test"

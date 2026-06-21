@@ -19,7 +19,7 @@ from typing import Any, Sequence
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from canonical import REQUEST_ALLOW, REQUEST_STRUCTURAL, request_digest
+from determinism.canonical import REQUEST_ALLOW, REQUEST_STRUCTURAL, request_digest
 
 #: Bumped only on a breaking change to the on disk shape; `from_dict` stays tolerant of older bodies.
 CASSETTE_VERSION = 1

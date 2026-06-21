@@ -16,10 +16,10 @@ import pathlib
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory
-from gateway import GatewayChatModel
-from models import build_chat_model, provider_tag
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
+from replay.gateway import GatewayChatModel
+from replay.providers import build_chat_model, provider_tag
 
 from atlas.domain.actions import ActionsBackend
 from atlas.domain.corpus import CORPUS

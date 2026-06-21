@@ -10,9 +10,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import HumanMessage
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory, fixture_kit
-from gateway import GatewayChatModel
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory, fixture_kit
+from replay.gateway import GatewayChatModel
 
 from atlas.chat_app import make_chat_app
 from atlas.domain import accounts

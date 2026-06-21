@@ -9,9 +9,9 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import HumanMessage
 
-from checkpointer import new_checkpointer
-from determinism import IdFactory
-from gateway import GatewayChatModel
+from determinism.checkpointer import new_checkpointer
+from determinism.sources import IdFactory
+from replay.gateway import GatewayChatModel
 from tracing import InMemoryTracer
 
 from atlas.domain.actions import ActionsBackend
@@ -47,7 +47,7 @@ async def test_read_path_emits_a_tool_span_under_the_agent(tmp_path, seed_casset
     # second hop: agent answers from the tool result. The tool text must be the REAL account server
     # output (else the second cassette key misses), so derive it from the domain, not by hand.
     from langchain_core.messages import AIMessage, ToolMessage
-    from canonical import serialize_tool_result
+    from determinism.canonical import serialize_tool_result
     from atlas.domain.accounts import get_account
     from atlas.domain.catalog import get_plan
 

@@ -1,7 +1,7 @@
 """P6, judge calibration: raw agreement flatters, Cohen's kappa reveals (06-judge-calibration)."""
 from __future__ import annotations
 
-from stats import cohen_kappa
+from evals.stats import cohen_kappa
 
 
 def test_perfect_agreement_is_one():

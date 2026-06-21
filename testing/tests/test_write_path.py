@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from determinism import IdFactory
+from determinism.sources import IdFactory
 
 from atlas.domain import accounts
 from atlas.domain.accounts import apply_write
