@@ -43,6 +43,10 @@ class EvalCase:
     - ``id``: stable identifier, the key results are reported under.
     - ``turns``: the user utterances to drive, in order, on one conversation thread.
     - ``customer_id``: the session identity (e.g. ``"cust_legacy_term"`` for the cold open).
+    - ``expected``: what *correct* means here, in the SME's words (prose, not a frozen value). This is
+      the human-verified oracle of the golden set, the one field an SME holds the pen on. The grader
+      that turns this prose into an executable check against the source of truth lands with a later
+      article; the case carries the SME's answer first-class so nothing downstream invents it.
     - ``name``: a one-line, human-readable title (e.g. "contracted customer asks to cancel").
     - ``risk``: the business risk this case guards, the bucket the outcome rolls up under (e.g.
       "fee-claim-safety", "data-isolation", "unauthorized-write"). This is the word a CTO reads.
@@ -54,6 +58,7 @@ class EvalCase:
     id: str
     turns: tuple[str, ...]
     customer_id: str
+    expected: str = ""
     name: str = ""
     risk: str = ""
     graders: tuple[str, ...] = ()
