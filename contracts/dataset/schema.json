@@ -44,6 +44,10 @@
       }
     },
     "refusal_class": { "type": ["string", "null"] },
+    "customer_id": {
+      "type": ["string", "null"],
+      "description": "The signed-in session identity this case runs under. Optional: a factoid case is identity-independent and any session answers it identically. Required in practice for any case whose end_state asserts account state or whose expected_tool_calls name a write tool."
+    },
     "persona": {
       "type": ["object", "null"],
       "additionalProperties": false,

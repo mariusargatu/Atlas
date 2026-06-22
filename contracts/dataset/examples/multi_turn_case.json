@@ -1,5 +1,6 @@
 {
   "case_id": "gc-0002",
+  "customer_id": "cust_current",
   "split": "dev",
   "origin": "authored",
   "candidate_source": null,
@@ -10,18 +11,38 @@
   "answerable": true,
   "expected_doc_ids": [],
   "expected_tool_calls": [
-    { "tool": "catalog.get_plan", "args": { "plan_id": "plan_legacy_value" } },
-    { "tool": "actions.change_plan", "args": { "plan_id": "plan_legacy_value" } }
+    {
+      "tool": "catalog.get_plan",
+      "args": {
+        "plan_id": "plan_legacy_value"
+      }
+    },
+    {
+      "tool": "actions.change_plan",
+      "args": {
+        "plan_id": "plan_legacy_value"
+      }
+    }
   ],
   "expected_facts": [],
   "refusal_class": null,
-  "persona": { "name": "sarah", "style": "direct" },
+  "persona": {
+    "name": "sarah",
+    "style": "direct"
+  },
   "turns": [
     {
-      "user": "I want to switch my plan, tell me about the Value plan first.",
+      "user": "I want to switch my plan, tell me about the Fiber 100 Legacy plan first.",
       "checkpoint": {
         "expected_intent": "action",
-        "expected_tool_calls": [{ "tool": "catalog.get_plan", "args": { "plan_id": "plan_legacy_value" } }],
+        "expected_tool_calls": [
+          {
+            "tool": "catalog.get_plan",
+            "args": {
+              "plan_id": "plan_legacy_value"
+            }
+          }
+        ],
         "note": "plan details must come from the catalog, not the model; the action cue in this turn is what binds catalog tools at all (a plain lookup would classify as troubleshooting and never reach the catalog)"
       }
     },
@@ -29,14 +50,27 @@
       "user": "Yes, switch me to it.",
       "checkpoint": {
         "expected_intent": "action",
-        "expected_tool_calls": [{ "tool": "actions.change_plan", "args": { "plan_id": "plan_legacy_value" } }]
+        "expected_tool_calls": [
+          {
+            "tool": "actions.change_plan",
+            "args": {
+              "plan_id": "plan_legacy_value"
+            }
+          }
+        ]
       }
     }
   ],
   "end_state": {
     "account_assertions": [
-      { "path": "plan_id", "equals": "plan_legacy_value" },
-      { "path": "bill.amount", "equals": "39.00" }
+      {
+        "path": "plan_id",
+        "equals": "plan_legacy_value"
+      },
+      {
+        "path": "bill.amount",
+        "equals": "24.99"
+      }
     ]
   }
 }

@@ -1,0 +1,3 @@
+{"case_id": "fixture-plan-contract-free", "turns": [{"user": "Is my plan contract-free?"}], "expected_facts": [{"fact_id": "plan-current:contract_free", "value": "contract-free"}]}
+{"case_id": "fixture-router-troubleshoot", "turns": [{"user": "My router light is blinking orange, what do I do?"}], "expected_facts": [{"fact_id": "device-router:restart_procedure", "value": "hold the power button for ten seconds"}]}
+{"case_id": "fixture-data-cap", "turns": [{"user": "Does my plan have a data cap?"}], "expected_facts": [{"fact_id": "plan-current:data_cap", "value": "unlimited"}]}
