@@ -3,7 +3,7 @@
 The agent core has exactly one nondeterministic node, the call to the model. The gateway is the
 seam that pins it, implemented as the very chat model the LangGraph graph already calls, so nothing
 upstream knows it is being recorded. It has three modes, and they are the seam between the two
-machineries the harness keeps apart (03-the-harness.md):
+machineries the harness keeps apart:
 
   REPLAY: the regression lane. Cassette only, zero egress, a miss is a hard fail. Deterministic by
            construction: same request, same decision, every run. This is what gates a merge.
@@ -15,7 +15,7 @@ machineries the harness keeps apart (03-the-harness.md):
 Responsibilities are split on purpose: the cassette *shape* lives in `cassette.py`, *where* it is
 stored lives in `cassette_store.py`, and this class only adapts those to LangChain's sync/async
 generate protocol. The only logic duplicated between `_generate` and `_agenerate` is the six line
-skeleton that LangChain's separate sync/async provider methods force; the policy (replay, persist,
+skeleton that LangChain's separate sync/async provider methods force. The policy (replay, persist,
 miss) is shared.
 """
 from __future__ import annotations
@@ -53,8 +53,8 @@ class GatewayMode(str, enum.Enum):
 
 
 class GatewayChatModel(BaseChatModel):
-    """Record/replay/live around a provider model. REPLAY needs a store and no network; RECORD and
-    LIVE need a live `inner` provider; the wiring is checked once, at construction, not per call.
+    """Record/replay/live around a provider model. REPLAY needs a store and no network. RECORD and
+    LIVE need a live `inner` provider, and the wiring is checked once, at construction, not per call.
 
     A store can be injected directly (`store=`) or, for the common case, named by directory
     (`cassette_dir=`) and built lazily into a `FileCassetteStore`.
@@ -83,7 +83,7 @@ class GatewayChatModel(BaseChatModel):
         return "gateway"
 
     def _resolved_store(self) -> Optional[CassetteStore]:
-        """The store to use: an injected one wins; otherwise build a file store from the directory."""
+        """The store to use: an injected one wins, otherwise build a file store from the directory."""
         if self.store is not None:
             return self.store
         if self.cassette_dir is not None:

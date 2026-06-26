@@ -2,7 +2,7 @@
 
 Pure stdlib, zero network: they prove the cassette key is stable, key order independent,
 ignores unrelated kwargs, keeps money exact, and that injected nondeterminism is *caught*
-by the digest (the negative meta test from 03-test-architecture.md).
+by the digest (the negative meta test).
 """
 from __future__ import annotations
 
@@ -30,6 +30,15 @@ def test_money_is_exact_not_float():
     assert serialize_tool_result({"bill": Decimal("39.10")}) == '{"bill":"D:39.1"}'
     # value equal money hashes identically regardless of scale (the content addressed key contract)
     assert serialize_tool_result({"bill": Decimal("39.10")}) == serialize_tool_result({"bill": Decimal("39.1000")})
+
+
+def test_scalar_type_tags_keep_a_decimal_and_a_float_apart():
+    # the tag is why two scalars that PRINT alike key apart: Decimal("0.1") and float 0.1
+    assert digest({"x": Decimal("0.1")}) != digest({"x": 0.1})
+    # the bounded invariant the cassette key rests on: this system's payloads never put a raw string
+    # where a tagged scalar goes (money is always Decimal, prose always string), so the untagged
+    # string can never collide with a tagged scalar in a real request. A money figure stays a Decimal.
+    assert digest({"bill": Decimal("39.00")}) != digest({"bill": "39.00"})
 
 
 # --- the request digest uses an allow list ---

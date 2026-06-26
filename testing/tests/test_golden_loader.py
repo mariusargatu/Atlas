@@ -1,9 +1,9 @@
-"""The golden CSV loader (04-golden-dataset.md): it ingests the intermediary CSV into loose drafts
+"""The golden CSV loader: it ingests the intermediary CSV into loose drafts
 and fails loud on a bad one.
 
-The loader is the forgiving inbound door: a flat, SME-editable CSV becomes ``GoldenDraft`` records
+The loader is the forgiving inbound door: a flat, SME editable CSV becomes ``GoldenDraft`` records
 that ``enrich`` later hardens into typed ``GoldenCase``. These tests pin both halves: the real CSV
-loads into well-formed drafts, and every malformed shape (unknown account, empty turns, duplicate
+loads into well formed drafts, and every malformed shape (unknown account, empty turns, duplicate
 id, missing column, missing file) raises rather than silently ingesting nothing.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.evalkit.golden import load_golden_drafts
+from evals.evalkit.golden_loader import load_golden_drafts
 
 _GOLDEN = Path(__file__).resolve().parents[1] / "harness/evals/datasets/atlas_golden.csv"
 

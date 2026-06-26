@@ -1,16 +1,16 @@
-"""The eval harness: the second of the two machines (03-the-harness.md).
+"""The eval harness: the second of the two machines.
 
-The regression lane (REPLAY) asks "did a pinned behaviour change?" — binary, gating, never
-flickering. This package is the OTHER machine: the eval harness that asks "how good is the
+The regression lane (REPLAY) asks "did a pinned behaviour change?" (binary, gating, never
+flickering). This package is the OTHER machine: the eval harness that asks "how good is the
 agent, and is it getting better or worse?" It drives the agent over seeded cases, grades each
 run with a layered grader stack, and reports a RATE, never a single verdict, because the live
 model is stochastic and one sample lies.
 
 Same runner, two gateway modes:
-- LIVE (nightly): the model varies; multi-trial sampling measures the variance.
-- REPLAY (PR lane): the model is pinned; the same runner proves its own wiring with zero egress.
+- LIVE (nightly): the model varies, and sampling many trials measures the variance.
+- REPLAY (PR lane): the model is pinned, so the same runner proves its own wiring with zero egress.
 
-Three roles kept separate (the three-agent harness): a planner designs the tasks, the generator
+Three roles kept separate (a harness of three agents): a planner designs the tasks, the generator
 (the Atlas graph, driven by the runner) produces the runs, and the evaluator (the grader stack)
 grades them. Named ``evalkit`` (not ``eval``) so it never shadows the builtin.
 """

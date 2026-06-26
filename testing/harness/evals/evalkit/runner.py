@@ -1,10 +1,10 @@
-"""The multi-trial runner: drive a case, grade each run, report a RATE not a verdict.
+"""The runner that repeats trials: drive a case, grade each run, report a RATE not a verdict.
 
-The live model is stochastic, so a single run is a single sample and a single sample lies; seven
-out of ten is not ten out of ten, and one pass cannot tell those two agents apart (03-the-harness).
+The live model is stochastic, so a single run is a single sample and a single sample lies. Seven
+out of ten is not ten out of ten, and one pass cannot tell those two agents apart.
 So the runner repeats each case ``k`` times and reports the pass rate. On REPLAY the model is
 pinned, so all ``k`` trials are identical and the rate is 0 or 1, which is exactly what lets the PR
-lane prove the runner's WIRING deterministically; the variance only appears on LIVE, the nightly
+lane prove the runner's WIRING deterministically. The variance only appears on LIVE, the nightly
 eval's job. (Turning that rate into a confidence interval is the statistics article's work, 07.)
 
 Only the model is allowed to vary between trials: each trial gets a fresh graph, tracer, write
@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 
 from evals.evalkit.case import EvalCase
 from evals.evalkit.graders import Composite, GradeContext, Grader, Verdict
 
 # build() -> (compiled graph, the tracer wired into it), fresh per trial. The caller owns wiring
-# (gateway mode, cassette dir, fakes), so the runner stays mode-agnostic: same runner on REPLAY/LIVE.
+# (gateway mode, cassette dir, fakes), so the runner stays mode agnostic: same runner on REPLAY/LIVE.
 GraphBuild = Callable[[], "tuple[object, object]"]
 
 
@@ -61,25 +62,37 @@ def _trial_passed(verdicts: Sequence[Verdict]) -> bool:
 
 
 async def _drive(graph, case: EvalCase, thread_id: str) -> str:
-    """Run the case's turns in order on one thread; return the text the agent would ship.
+    """Run the case's turns in order on one thread, and return the text the agent would ship.
 
     Every terminal path of the graph (render / confirm / binding-block) sets ``final_response``,
     so that channel is the single, authoritative "what shipped" the eval grades.
 
-    The turns are replayed VERBATIM — the correct hermetic default. A ``UserSimulator`` (a scripted
+    The turns are replayed VERBATIM, the correct hermetic default. A ``UserSimulator`` (a scripted
     user, or an LLM user with information asymmetry driven through the gateway, the tau-bench pattern)
-    plugs in exactly here and is deferred to the golden-dataset article (04); see ``case.py``.
+    plugs in exactly here and is deferred to the golden dataset article (04). See ``case.py``.
     """
     final = ""
-    # All turns run on ONE thread_id: under the checkpointer that is what makes a multi-turn case a
-    # real conversation — turn 2 resumes turn 1's state (messages, a pending confirm), instead of
-    # starting cold. Per-trial isolation comes from the fresh graph/checkpointer `build()` hands us,
+    config = {"configurable": {"thread_id": thread_id}}
+    # All turns run on ONE thread_id: under the checkpointer that is what makes a case of many turns a
+    # real conversation. Turn 2 resumes turn 1's state (messages, a pending confirm), instead of
+    # starting cold. Per trial isolation comes from the fresh graph/checkpointer `build()` hands us,
     # not from changing the thread between turns.
+    #
+    # A paused confirmation is a LangGraph `interrupt()`, not an ordinary node boundary: the graph
+    # only actually resumes that node when the NEXT call is `Command(resume=...)` (the exact contract
+    # `confirm()` in atlas_graph.py, `chat_app.py`'s `/chat/resume`, and `test_confirm_graph.py` all
+    # share). A fresh `{"messages": [...]}` input instead restarts the graph from START, so the pending
+    # confirm is silently never delivered.
+    awaiting_confirm = False
     for utterance in case.turns:
-        out = await graph.ainvoke(
-            {"messages": [HumanMessage(utterance)], "session": {"customer_id": case.customer_id}},
-            {"configurable": {"thread_id": thread_id}},
-        )
+        if awaiting_confirm:
+            out = await graph.ainvoke(Command(resume=utterance), config)
+        else:
+            out = await graph.ainvoke(
+                {"messages": [HumanMessage(utterance)], "session": {"customer_id": case.customer_id}},
+                config,
+            )
+        awaiting_confirm = "__interrupt__" in out
         final = out.get("final_response") or ""
     return final
 

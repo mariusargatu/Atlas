@@ -1,4 +1,4 @@
-"""Statistics: make eval numbers honest (07-statistics.md). A score without an interval is
+"""Statistics: make eval numbers honest. A score without an interval is
 an anecdote. Named `stats` (not `statistics`) so it never shadows the stdlib module.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ def intervals_overlap(a: tuple[float, float], b: tuple[float, float]) -> bool:
 
 
 def cohen_kappa(rater_a: list[int], rater_b: list[int]) -> float:
-    """Chance corrected agreement between two raters' binary labels (06-judge-calibration).
+    """Chance corrected agreement between two raters' binary labels.
 
     Raw percent agreement flatters; kappa reveals. A judge that agrees with humans only at
     chance scores ~0 even when raw agreement looks high, the lying judge lesson.

@@ -1,8 +1,8 @@
 """The guard, fail closed policy checks (principle 10), pure domain.
 
-The LangGraph guard nodes call these; the default is always "no". Scope keeps identity from
-the session (an id the model produced is rejected); the single write rule fails closed on a
-multi or mixed tool batch; value bounds reject an argument nudged out of the catalog (the
+The LangGraph guard nodes call these. The default is always "no". Scope keeps identity from
+the session (an id the model produced is rejected). The single write rule fails closed on a
+multi or mixed tool batch. Value bounds reject an argument nudged out of the catalog (the
 "move me to the internal £0 plan" attack).
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ WRITE_TOOLS = {"change_plan", "add_addon", "remove_addon", "reset_modem", "open_
 _NO_CONTRACT_CUES = ("contract-free", "no fee", "cancel any time", "cancel anytime", "no contract")
 
 # Executable markup the Lena failure (LLM05) smuggled through a chat reply: a tag, an event
-# handler, or a javascript: URL. The model's output is untrusted; this is the escape before render
+# handler, or a javascript: URL. The model's output is untrusted. This is the escape before render
 # rule from web security, enforced at the door rather than trusted to the model.
 _UNSAFE_MARKUP = re.compile(r"<\s*/?\s*(script|iframe|img|svg|object|embed)\b|on\w+\s*=|javascript:", re.IGNORECASE)
 
@@ -103,7 +103,7 @@ def check_no_other_customer(text: str, customer_id: str) -> GuardVerdict:
 def check_render_truth(text: str, customer_id: str) -> GuardVerdict:
     """Content check (pre render): a 'no contract / no fee' claim served to a customer who actually
     has a term contradicts the account oracle, the cold open's last line render catch. The oracle,
-    not the wording, decides; this is the single home of the contradiction rule (`02-app-spec.md`).
+    not the wording, decides. This is the single home of the contradiction rule.
     """
     claims_no_contract = any(cue in text.lower() for cue in _NO_CONTRACT_CUES)
     if claims_no_contract and truth_for(customer_id).has_contract:

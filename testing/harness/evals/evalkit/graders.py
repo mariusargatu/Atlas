@@ -1,11 +1,11 @@
-"""The grader stack: grade with the cheapest, strictest tool that can do the job (03-the-harness.md).
+"""The grader stack: grade with the cheapest, strictest tool that can do the job.
 
-The harness owns the STACK shape, an ordered set of graders run cheapest-first, short-circuiting at
+The harness owns the STACK shape, an ordered set of graders run cheapest first, short circuiting at
 the first hard fail, so an expensive grader never runs once a cheaper one has already failed the
 run. The concrete graders are deliberately NOT here: rules over an oracle, programmatic value
 checks, and an LLM judge each embed a later article's domain (faithfulness/correctness, the judge
 and its calibration) and land with those articles. This module ships only the machinery plus one
-trivial, domain-free grader, so the stack is demonstrable without pre-empting that work.
+trivial, domain free grader, so the stack is demonstrable without preempting that work.
 """
 from __future__ import annotations
 
@@ -28,9 +28,9 @@ class Verdict:
 class GradeContext:
     """What every grader reads: the run's outcome and the trace it emitted.
 
-    ``final_response`` is the text the agent would have shipped; ``trace`` is the turn's span tree
+    ``final_response`` is the text the agent would have shipped. ``trace`` is the turn's span tree
     (read only), the eval harness's substrate (principle 4). Later articles add the oracle/judge a
-    real grader needs; a grader takes only what it reads, so new fields never break existing ones.
+    real grader needs. A grader takes only what it reads, so new fields never break existing ones.
     """
 
     customer_id: str
@@ -39,13 +39,10 @@ class GradeContext:
 
 
 class Grader(Protocol):
-    """The grader port. The harness provides the slot; concrete graders arrive with later articles.
+    """The grader port. The harness provides the slot, and concrete graders arrive with later articles.
 
-    One such concrete grader is a ``TrajectoryGrader`` with match modes (strict / unordered / subset /
-    superset over the tool calls, plus tool-call precision/recall — the LangChain ``agentevals``
-    standard). It reads the tool order from ``ctx.trace`` (``tracing.tool_order()``) against an
-    expected trajectory on the case. It is deferred to the golden-dataset article (04), which owns the
-    expected-trajectory field; see ``case.py``. It is a deliberate deferral, not an oversight.
+    A ``TrajectoryGrader`` that scores the tool order on ``ctx.trace`` against a case's expected
+    trajectory lands with the golden dataset article (04), which owns that field. See ``case.py``.
     """
 
     name: str
@@ -55,8 +52,8 @@ class Grader(Protocol):
 
 class PredicateGrader:
     """The trivial grader: wraps any predicate over the run into a ``Verdict``. Generic harness
-    machinery with NO domain knowledge baked in, so it shows the grader-stack slot and the
-    short-circuit behaviour without standing in for the real graders. The cheapest, strictest check
+    machinery with NO domain knowledge baked in, so it shows the grader stack slot and the
+    short circuit behaviour without standing in for the real graders. The cheapest, strictest check
     that can decide a run, expressed as a plain callable, plugs in exactly here.
     """
 
@@ -71,7 +68,7 @@ class PredicateGrader:
 
 
 class Composite:
-    """Run graders cheapest-first; stop at the first hard fail (short-circuit)."""
+    """Run graders cheapest first, and stop at the first hard fail (short circuit)."""
 
     def __init__(self, graders: Sequence[Grader]) -> None:
         self._graders = tuple(graders)
