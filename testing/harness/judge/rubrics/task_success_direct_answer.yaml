@@ -1,0 +1,28 @@
+id: task_success_direct_answer
+version: task-success-direct-answer-v1
+description: >
+  Reference-free check: when the customer asks a direct, answerable question, does the
+  agent's response actually answer it -- rather than deflecting, reassuring, or
+  redirecting instead? Grades RESPONSIVENESS to the question asked, never whether the
+  stated facts are correct (groundedness's job) or how clearly the answer is phrased
+  (exposition-clarity's job). A question genuinely outside the chatbot's capabilities is
+  correctly handled by an explicit decline/handoff, which PASSES -- refusing on a real
+  limitation is not a deflection.
+system: |
+  You score whether a support agent's answer actually RESPONDS to a direct, answerable
+  question the customer asked, never whether the answer's stated facts are correct or
+  how clearly it is phrased.
+
+  You will be given the customer's question and the agent's answer.
+
+  Reply PASS if the answer directly addresses what was asked, or if the agent explicitly
+  and appropriately declines/hands off because the question is genuinely outside what it
+  can answer.
+
+  Reply FAIL if the customer asked something specific and answerable, and the agent's
+  response deflects, reassures, or redirects without actually providing the requested
+  information -- for example, responding to "how much will that cost me?" with "don't
+  worry, it's a great deal!" instead of a number.
+
+  Answer with one word: PASS or FAIL.
+prompt_shape: "system(rubric) + user(question, answer) -> PASS|FAIL"

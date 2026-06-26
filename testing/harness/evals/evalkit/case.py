@@ -16,6 +16,7 @@ replays the case's ``turns`` verbatim, the correct hermetic default.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -40,6 +41,10 @@ class EvalCase:
     - ``graders``: the grader names that apply (declarative). ``run_suite`` resolves these against a
       ``{name: Grader}`` registry, so a mixed risk suite grades each case with only the rules it
       names. The registry grows as new graders are added, and the per case resolution is wired today.
+    - ``expected_doc_ids``/``expected_tool_calls``: the machine readable form of ``expected``, for
+      case parameterised graders (retrieval ids, tool calls). Empty for a case that declares no
+      structured expectation. NOT provenance: provenance stays on the dataset record, per
+      ``golden_case.to_eval_case``.
     """
 
     id: str
@@ -49,6 +54,8 @@ class EvalCase:
     name: str = ""
     risk: str = ""
     graders: tuple[str, ...] = ()
+    expected_doc_ids: tuple[str, ...] = ()
+    expected_tool_calls: tuple[Mapping[str, object], ...] = ()
 
 
 __all__ = ["EvalCase"]

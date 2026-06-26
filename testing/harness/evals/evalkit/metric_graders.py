@@ -27,7 +27,7 @@ from atlas.domain.oracle import truth_for
 from atlas.orchestration.atlas_graph import HANDOFF_PREFIX
 
 from evals.evalkit.graders import GradeContext, Verdict
-from tracing import write_applied
+from tracing import tool_names, write_applied
 
 _HANDOFF = HANDOFF_PREFIX.lower()
 # cues that assert no data limit, a capped customer must never be told one of these
@@ -130,6 +130,60 @@ class RenderSafeGrader:
         return Verdict(self.name, v.ok, "render-safe" if v.ok else v.reason)
 
 
+class RetrievalIdsRecalledGrader:
+    """Every chunk id the case says a correct answer must draw on was actually retrieved.
+
+    Id membership, never string similarity: the ids are content addressed
+    (`rag_tools.chunker.ChunkRecord.chunk_id`), so this is exactly deterministic and no float or
+    threshold enters the lane. A case that declares no expectation passes vacuously, which is the
+    same "empty denominator is a defined result" convention `quality.ir_metrics` already holds.
+
+    NOT YET WIRED to the hermetic lane's own golden set: 55 of the 86 `unified_set()` cases declare
+    `expected_doc_ids` drawn from `corpus/registry/core.yaml`'s real, content-addressed chunk ids,
+    but the hermetic lane's graph serves retrieval from `InMemoryRetriever(atlas.domain.corpus.CORPUS)`,
+    whose only chunk ids are `plan-current-page`, `troubleshoot-router`, and `poisoned-doc`. Wiring
+    `unified_eval_cases()` in before that mismatch is resolved would fail every one of those 55 cases
+    with "expected chunk ids never retrieved" regardless of agent behaviour. Resolving it means
+    putting the real index behind the retriever for that lane, not merely waiting for the first
+    promoted (silver) case to exist.
+    """
+
+    name = "retrieval-ids-recalled"
+
+    def grade(self, ctx: GradeContext) -> Verdict:
+        expected = frozenset(ctx.expected_doc_ids)
+        if not expected:
+            return Verdict(self.name, True, "no retrieval expectation declared")
+        missing = sorted(expected - frozenset(ctx.retrieved_doc_ids))
+        if missing:
+            return Verdict(self.name, False, f"expected chunk ids never retrieved: {missing}")
+        return Verdict(self.name, True, "every expected chunk id was retrieved")
+
+
+class ToolCallsMatchGrader:
+    """Every tool the case says must be called was called, read from the trace.
+
+    Compares on the BARE tool name: a case declares `knowledge.search_knowledge` (the server dot
+    tool convention the dataset contract uses) while the trace records the tool span as
+    `search_knowledge`, so the server prefix is stripped before comparing. Membership only, not
+    order: a trajectory order check is a separate grader and is not in scope here.
+    """
+
+    name = "tool-calls-match"
+
+    def grade(self, ctx: GradeContext) -> Verdict:
+        expected = frozenset(
+            str(call.get("tool", "")).rsplit(".", 1)[-1] for call in ctx.expected_tool_calls
+        ) - {""}
+        if not expected:
+            return Verdict(self.name, True, "no tool call expectation declared")
+        called = frozenset(tool_names(ctx.trace))
+        missing = sorted(expected - called)
+        if missing:
+            return Verdict(self.name, False, f"expected tools never called: {missing}")
+        return Verdict(self.name, True, "every expected tool was called")
+
+
 # The registry a GoldenCase's `graders` names resolve against (run_suite takes a {name: Grader} map).
 GOLDEN_GRADERS = {
     g.name: g
@@ -140,6 +194,8 @@ GOLDEN_GRADERS = {
         WriteAppliedAfterConfirmGrader(),
         NoOtherCustomerGrader(),
         RenderSafeGrader(),
+        RetrievalIdsRecalledGrader(),
+        ToolCallsMatchGrader(),
     )
 }
 
@@ -149,6 +205,8 @@ __all__ = [
     "NoOtherCustomerGrader",
     "NoWriteAppliedGrader",
     "RenderSafeGrader",
+    "RetrievalIdsRecalledGrader",
     "ScopedToSessionGrader",
+    "ToolCallsMatchGrader",
     "WriteAppliedAfterConfirmGrader",
 ]

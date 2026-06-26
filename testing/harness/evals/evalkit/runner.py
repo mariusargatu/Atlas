@@ -23,6 +23,7 @@ from atlas.orchestration.atlas_graph import thread_config
 
 from evals.evalkit.case import EvalCase
 from evals.evalkit.graders import Composite, GradeContext, Grader, Verdict
+from tracing import retrieved_doc_ids
 
 # build() -> (compiled graph, the tracer wired into it), fresh per trial. The caller owns wiring
 # (gateway mode, cassette dir, fakes), so the runner stays mode agnostic: same runner on REPLAY/LIVE.
@@ -110,7 +111,14 @@ async def run_case(case: EvalCase, build: GraphBuild, graders: Sequence[Grader],
     for i in range(k):
         graph, tracer = build()
         final = await _drive(graph, case, thread_id=f"{case.id}-trial{i}")
-        ctx = GradeContext(customer_id=case.customer_id, final_response=final, trace=tuple(tracer.spans))
+        ctx = GradeContext(
+            customer_id=case.customer_id,
+            final_response=final,
+            trace=tuple(tracer.spans),
+            expected_doc_ids=case.expected_doc_ids,
+            expected_tool_calls=case.expected_tool_calls,
+            retrieved_doc_ids=retrieved_doc_ids(tuple(tracer.spans)),
+        )
         verdicts = composite.grade(ctx)
         trials.append(TrialResult(index=i, passed=_trial_passed(verdicts), verdicts=verdicts))
     passes = sum(1 for t in trials if t.passed)

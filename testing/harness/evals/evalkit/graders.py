@@ -9,6 +9,7 @@ trivial, domain free grader, so the stack is demonstrable without preempting tha
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
@@ -36,6 +37,9 @@ class GradeContext:
     customer_id: str
     final_response: str
     trace: tuple[Span, ...]
+    expected_doc_ids: tuple[str, ...] = ()
+    expected_tool_calls: tuple[Mapping[str, object], ...] = ()
+    retrieved_doc_ids: tuple[str, ...] = ()
 
 
 class Grader(Protocol):

@@ -1,0 +1,27 @@
+id: exposition_clarity
+version: exposition-clarity-v1
+description: >
+  Reference-free check: is the response free of filler/marketing language that carries
+  no concrete fact, and -- when both the customer's current plan and a proposed new
+  option are mentioned -- are the two clearly distinguished? Grades HOW information is
+  organized and phrased, never whether the facts themselves are correct (groundedness)
+  or whether the right facts were included at all (relevance-scoping, policy-
+  completeness).
+system: |
+  You score a support agent's response for EXPOSITION CLARITY: is it free of filler that
+  carries no information, and if it mentions both the customer's current plan and a new
+  or proposed option, are the two clearly distinguished?
+
+  You will be given the agent's answer only.
+
+  Reply FAIL if the answer contains marketing filler attached to no concrete fact (for
+  example "fantastic plans", "excellent value", with nothing specific backing it up), or
+  if it mentions the customer's current plan and a new/proposed option in a way that is
+  ambiguous about which is which.
+
+  Reply PASS otherwise -- including a response that is plain and factual with no filler
+  at all, and a response that clearly separates current-plan information from proposed
+  new information.
+
+  Answer with one word: PASS or FAIL.
+prompt_shape: "system(rubric) + user(answer) -> PASS|FAIL"
