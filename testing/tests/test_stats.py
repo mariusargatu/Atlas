@@ -1,9 +1,9 @@
-"""P2, statistics: a score without an interval is an anecdote (07-statistics.md)."""
+"""P2, statistics: a score without an interval is an anecdote."""
 from __future__ import annotations
 
 import pytest
 
-from evals.stats import intervals_overlap, wilson_interval
+from evals.stats import cohen_kappa, intervals_overlap, wilson_interval
 
 
 def test_close_scores_have_overlapping_intervals():
@@ -28,3 +28,22 @@ def test_zero_trials_is_the_widest_interval_not_false_certainty():
 def test_invalid_counts_raise():
     with pytest.raises(ValueError):
         wilson_interval(5, 3)  # successes > n is nonsense, not a silent 1.0+ rate
+
+
+def test_kappa_pins_the_formula_on_an_asymmetric_case():
+    # Golden value over UNEQUAL marginals (pa=0.3, pb=0.2), the way wilson is pinned. A mutant that
+    # drops the (1-pa)(1-pb) term from the expected agreement reads 0.89 here, so this pin kills it.
+    a = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+    b = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    assert round(cohen_kappa(a, b), 4) == 0.7368
+
+
+def test_kappa_is_one_when_both_raters_always_agree():
+    assert cohen_kappa([1, 1, 1], [1, 1, 1]) == 1.0
+
+
+def test_kappa_rejects_mismatched_or_empty_input():
+    with pytest.raises(ValueError):
+        cohen_kappa([1, 0], [1])
+    with pytest.raises(ValueError):
+        cohen_kappa([], [])

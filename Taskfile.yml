@@ -90,3 +90,8 @@ tasks:
     desc: differential oracle (spike) — grade inference-truth via two independent derivations, not a stored column.
     cmds:
       - PYTHONPATH=backend:testing/harness:. uv run python -m evals.inference_oracle
+
+  judge:
+    desc: judge calibration — a cross-family judge scored against human labels; one rubric fix moves Cohen's k from ~0.29 to ~0.85. REPLAY, no keys.
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.judge

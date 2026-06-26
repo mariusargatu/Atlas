@@ -46,6 +46,13 @@ def guard_outcomes(spans) -> list[tuple[str, bool]]:
     return [(s.name, bool(s.attributes.get("ok"))) for s in spans_of_kind(spans, "guard")]
 
 
+def write_applied(spans) -> bool:
+    """Did a write land? True iff some ``execute_action`` node span carries a truthy ``applied``.
+    The one definition, structural and never from prose, shared by the eval graders and the drift
+    lane so a renamed span or a changed rule moves here, not in two places that can silently diverge."""
+    return any(s.name == "execute_action" and s.attributes.get("applied") for s in spans_of_kind(spans, "node"))
+
+
 class Tracer(Protocol):
     """The trace port. Adapters: ``InMemoryTracer`` (CI), an OTel/Langfuse handler (dev/prod)."""
 
@@ -101,5 +108,5 @@ class InMemoryTracer:
 
 __all__ = [
     "InMemoryTracer", "NullTracer", "Span", "Tracer",
-    "spans_of_kind", "tool_names", "guard_outcomes",
+    "spans_of_kind", "tool_names", "guard_outcomes", "write_applied",
 ]

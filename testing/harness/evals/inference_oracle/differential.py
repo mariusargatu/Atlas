@@ -1,13 +1,15 @@
 """The differential oracle: grade inference-truth by two independent computations.
 
-Differential / metamorphic testing applied to the oracle problem. The truth is computed twice, once
-by a trusted deterministic rules engine and once by the model (the claim under test). If the two
-disagree, the answer is wrong — and you reached that verdict WITHOUT a pre-stored label, which is the
-only way to grade an answer whose truth you could never tabulate in advance.
+Differential testing (a pseudo-oracle, the N-version idea) applied to the oracle problem. The truth
+is computed twice, once by a trusted deterministic rules engine and once by the model (the claim
+under test). If the two disagree, the answer is wrong, and you reached that verdict WITHOUT a
+pre-stored label, the only way to grade an answer whose truth you could never tabulate in advance.
+(Not metamorphic testing: there is no transformed input or output relation here, just two
+independent derivations of the same value.)
 
 This is the inference-truth complement to the lookup oracle. Where `is_correct_vs_truth` checks a
 claimed value against a stored column, this checks a claimed value against a DERIVATION over the
-facts. The cold open caught a faithful-but-false answer with a lookup; this catches a plausible-but-
+facts. The cold open caught a faithful but false answer with a lookup; this catches a plausible but
 wrong DERIVED answer with a difference.
 """
 from __future__ import annotations

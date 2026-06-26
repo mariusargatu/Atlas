@@ -1,7 +1,7 @@
 """The multi-trial runner: drive a case, grade each run, report a RATE not a verdict.
 
 The live model is stochastic, so a single run is a single sample and a single sample lies; seven
-out of ten is not ten out of ten, and one pass cannot tell those two agents apart (03-the-harness).
+out of ten is not ten out of ten, and one pass cannot tell those two agents apart.
 So the runner repeats each case ``k`` times and reports the pass rate. On REPLAY the model is
 pinned, so all ``k`` trials are identical and the rate is 0 or 1, which is exactly what lets the PR
 lane prove the runner's WIRING deterministically; the variance only appears on LIVE, the nightly

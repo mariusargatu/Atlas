@@ -1,7 +1,7 @@
 """The semantic cache port, the cheapest component with the nastiest isolation bug.
 
 Customer specific answers MUST be keyed per customer; only generic, customer independent answers
-are shared across the population (`02-app-spec.md`). A cache hit still passes the render guard.
+are shared across the population. A cache hit still passes the render guard.
 """
 from __future__ import annotations
 

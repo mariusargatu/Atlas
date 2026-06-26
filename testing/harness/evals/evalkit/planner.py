@@ -1,4 +1,4 @@
-"""The planner: the first role of the three-agent harness (03-the-harness.md).
+"""The planner: the first role of the three-agent harness.
 
 The pattern for generating and grading at scale keeps three roles separate: a PLANNER that designs
 the task, a GENERATOR that drives the agent under test, and a calibrated EVALUATOR that grades the

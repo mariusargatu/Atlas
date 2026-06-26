@@ -1,4 +1,4 @@
-"""P6, judge calibration: raw agreement flatters, Cohen's kappa reveals (06-judge-calibration)."""
+"""P6, judge calibration: raw agreement flatters, Cohen's kappa reveals."""
 from __future__ import annotations
 
 from evals.stats import cohen_kappa

@@ -1,4 +1,4 @@
-"""The eval harness: the second of the two machines (03-the-harness.md).
+"""The eval harness: the second of the two machines.
 
 The regression lane (REPLAY) asks "did a pinned behaviour change?" — binary, gating, never
 flickering. This package is the OTHER machine: the eval harness that asks "how good is the

@@ -1,4 +1,4 @@
-"""Ingest the golden seed from CSV into loose ``GoldenDraft`` records (04-golden-dataset.md).
+"""Ingest the golden seed from CSV into loose ``GoldenDraft`` records.
 
 The CSV is the INTERMEDIARY, the spreadsheet an SME reads and edits and the blog uses to explain how
 a case is authored. It is not the canonical artifact; ``datasets/seed.py`` is, holding validated

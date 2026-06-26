@@ -1,4 +1,4 @@
-"""The eval harness, tested on the REPLAY lane (03-the-harness.md, the second machine).
+"""The eval harness, tested on the REPLAY lane (the second machine).
 
 This is the eval harness testing ITSELF: the same runner the nightly LIVE lane uses, run on the
 pinned gateway so the test is deterministic and has zero egress. On REPLAY every trial is identical,

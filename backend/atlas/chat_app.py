@@ -5,7 +5,7 @@ token, never the request body (principle 1). `thread_id` is namespaced server si
 one customer can never resume another's pending interrupt. The graph (with its checkpointer) is a
 single long lived object, so a `/chat` interrupt and its `/chat/resume` share confirmation state.
 
-Streaming is a non goal in v1 (00-overview): every turn is request/response. The model + graph are
+Streaming is a non goal in v1: every turn is request/response. The model + graph are
 injected so tests wire a replayed gateway and an in memory backend (hermetic), exactly like the
 rest of the suite.
 """
@@ -103,7 +103,7 @@ def make_chat_app(clock, graph, *, cors_origins: list[str] | None = None) -> Fas
     # ---- auth ----
     @app.post("/auth/login", response_model=AuthOut)
     def login(body: LoginBody, response: Response) -> dict:
-        """Demo sign in AS a seeded customer (no password). Real auth is out of scope (00-overview)."""
+        """Demo sign in AS a seeded customer (no password). Real auth is out of scope."""
         if body.customer_id not in SEED:
             raise HTTPException(status_code=404, detail="unknown customer")
         now = clock.now()

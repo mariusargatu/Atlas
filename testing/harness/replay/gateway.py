@@ -3,7 +3,7 @@
 The agent core has exactly one nondeterministic node, the call to the model. The gateway is the
 seam that pins it, implemented as the very chat model the LangGraph graph already calls, so nothing
 upstream knows it is being recorded. It has three modes, and they are the seam between the two
-machineries the harness keeps apart (03-the-harness.md):
+machineries the harness keeps apart:
 
   REPLAY: the regression lane. Cassette only, zero egress, a miss is a hard fail. Deterministic by
            construction: same request, same decision, every run. This is what gates a merge.

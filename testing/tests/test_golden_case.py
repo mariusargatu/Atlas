@@ -1,4 +1,4 @@
-"""The typed golden record (04-golden-dataset.md): validation, enrichment, and the two projections.
+"""The typed golden record: validation, enrichment, and the two projections.
 
 ``GoldenCase`` is the REQUIRED typed format: invalid construction must raise, the committed seed must
 be valid on import, ``enrich`` must harden a loose draft, and the case must project cleanly to the

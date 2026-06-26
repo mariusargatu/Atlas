@@ -1,9 +1,12 @@
 """Per intent tool binding, least agency (principle 11).
 
-Unauthorized actions are *unreachable*, not merely guarded: a troubleshooting turn never
-binds the actions tools, so an injected document that says "reset this customer's equipment"
-has no tool to reach. The strongest least agency control is not a check, it is the absence
-of the capability.
+Each turn binds an intent to a fixed set of tools, and the graph refuses to run any tool outside it.
+A troubleshooting turn binds knowledge and reads but never the write tools, so an injected document
+that says "reset this customer's equipment" hits a closed door: the graph intercepts the call and
+fails closed before it can execute (``atlas_graph.pre_action_guard``). In this reference runtime the
+model is the same regardless of intent and the binding is enforced as that intercept; a dev/prod
+build would also hand the model only the bound tools, so the capability is simply absent. Either way
+the reachable set is the same, decided before the model acts.
 """
 from __future__ import annotations
 

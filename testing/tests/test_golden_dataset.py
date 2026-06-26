@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from evals.evalkit.case import EvalCase
-from evals.evalkit.golden import load_golden_drafts
+from evals.evalkit.golden_loader import load_golden_drafts
 from evals.evalkit.golden_set import (
     as_eval_cases,
     coverage,

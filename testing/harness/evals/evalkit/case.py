@@ -6,26 +6,13 @@ small now avoids pre-empting that design. A case names WHAT to run (the turns, t
 WHICH graders apply by name; the runner is handed the grader instances, so a case stays pure data.
 
 Identity rides in ``customer_id`` and is fed into the non-model ``session`` channel, never as a
-tool argument the model can fill, the invariant the whole system turns on (principle: identity
-comes from the session, never the model).
+tool argument the model can fill, the invariant the whole system turns on.
 
-Deferred to 04 — deliberate, not an oversight
----------------------------------------------
-Two capabilities a 2026 reader will look for are real standards but belong to 04's rich case
-format, so they are named here rather than half-built now:
-
-- **An expected trajectory + a ``TrajectoryGrader`` with match modes** — strict / unordered /
-  subset / superset over the tool calls, plus tool-call precision/recall. This is now table stakes
-  for agent evals (LangChain ``agentevals`` ships exactly those four modes; LangSmith has trajectory
-  match). It needs a ``trajectory`` field on the case, which is part of 04's format. Until then the
-  drift lane's ``DecisionRecord`` already captures the tool order, and a grader can read it through
-  ``GradeContext.trace`` (``tracing`` exposes ``tool_order()``). See ``graders.py``.
-
-- **A ``UserSimulator``** — a scripted user by default, and an LLM user-simulator with information
-  asymmetry driven *through the gateway* (so it is cassette-replayable) for the LIVE lane. This is
-  the tau-bench pattern. Today ``runner._drive`` replays the case's ``turns`` verbatim, which is the
-  correct hermetic default; turning a turn list into a simulated user is a case-authoring concern 04
-  owns, so ``turns`` stays literal data here. See ``runner.py``.
+Two fields a reader will look for are named here but built in 04, not half-built now: an expected
+trajectory with a ``TrajectoryGrader`` (match modes over the tool calls, the agentevals standard),
+and a ``UserSimulator`` (a scripted or LLM-driven user for the LIVE lane, the tau-bench pattern).
+Until then the drift lane's ``DecisionRecord`` already captures tool order, and ``runner._drive``
+replays the case's ``turns`` verbatim, the correct hermetic default.
 """
 from __future__ import annotations
 

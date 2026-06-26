@@ -3,7 +3,7 @@
 The drift lane (the fourth gateway reading) re-runs the pinned agent against a new model snapshot
 and asks whether behaviour moved. "Behaviour" is not the prose, it is the decisions: the intent the
 turn bound, the tools it called and in what order, the guard verdicts it produced, and the terminal
-outcome. The shipped text is kept too, but as a SEPARATE digest, so a reworded-but-equivalent answer
+outcome. The shipped text is kept too, but as a SEPARATE digest, so a reworded but equivalent answer
 (prose drift) never masquerades as a changed decision (behavioural drift). See the drift compare.
 
 Every decision is read from the TRACE — the structural record the runtime emits — never re-derived
@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from determinism.canonical import digest
-from tracing import guard_outcomes, tool_names
+from tracing import guard_outcomes, tool_names, write_applied
 
 from atlas.domain.binding import classify_intent
 
@@ -57,15 +57,14 @@ def _intent_from_trace(trace):
 def _outcome_of(trace) -> str:
     """Recover the TERMINAL outcome from the span tree, never from the prose. The graph records the
     decision structurally: an `execute_action` node span (applied=True -> a write landed; applied=
-    False -> the confirmation was refused), and the guard spans (any ok=False -> a fail-closed
+    False -> the confirmation was refused), and the guard spans (any ok=False -> a fail closed
     handoff). Reading prose to recover this would let a benign answer that merely says "your
     reference is ..." masquerade as a write — the exact false positive the drift lane must not make.
     """
-    executes = [s for s in trace if s.kind == "node" and s.name == "execute_action"]
-    if any(bool(s.attributes.get("applied")) for s in executes):
+    if write_applied(trace):
         return "write-applied"
-    if executes:  # an execute_action that did not apply == a refused confirmation
-        return "handoff"
+    if any(s.kind == "node" and s.name == "execute_action" for s in trace):
+        return "handoff"  # an execute_action that did not apply == a refused confirmation
     if any(not ok for _, ok in guard_outcomes(trace)):
         return "handoff"
     return "answer"

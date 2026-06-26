@@ -56,6 +56,7 @@ omit = [
     "testing/harness/evals/evalkit/__main__.py",          # eval lane demo entrypoint (task eval), operator-run
     "testing/harness/evals/drift/__main__.py",            # drift lane demo entrypoint (task drift), operator-run
     "testing/harness/evals/inference_oracle/__main__.py", # differential oracle demo (task oracle), operator-run
+    "testing/harness/evals/judge/__main__.py",            # judge calibration study (task judge), operator-run
     "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
     "backend/atlas/ports/*",                     # Protocol definitions, signatures, not behaviour
 ]

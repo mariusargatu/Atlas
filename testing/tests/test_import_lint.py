@@ -1,4 +1,4 @@
-"""The import lint, itself a test (`03-test-architecture.md`).
+"""The import lint, itself a test.
 
 The hexagon only holds if it is enforced. ``atlas/domain`` and ``atlas/ports`` are pure: they
 import no framework and no client, and they never import an outer ring. This is the test that
@@ -20,7 +20,7 @@ FORBIDDEN_TOPLEVEL = {
 # Outer rings a pure layer must not depend on (dependencies point inward only).
 FORBIDDEN_ATLAS_PREFIXES = ("atlas.orchestration", "atlas.adapters", "atlas.mcp_servers")
 
-# The two-harness seam (03-the-harness.md, property 5): the agent harness is the product and must
+# The two-harness seam (property 5): the agent harness is the product and must
 # never import the eval harness. The eval harness reads the agent through its ports; the dependency
 # is one way. A backend import of `evals` (the lane package: evalkit/drift/inference_oracle) or any
 # `testing.*` would wire the test rig into the runtime, the conflation the article warns about.

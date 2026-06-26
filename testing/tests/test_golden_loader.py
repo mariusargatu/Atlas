@@ -1,4 +1,4 @@
-"""The golden CSV loader (04-golden-dataset.md): it ingests the intermediary CSV into loose drafts
+"""The golden CSV loader: it ingests the intermediary CSV into loose drafts
 and fails loud on a bad one.
 
 The loader is the forgiving inbound door: a flat, SME-editable CSV becomes ``GoldenDraft`` records
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.evalkit.golden import load_golden_drafts
+from evals.evalkit.golden_loader import load_golden_drafts
 
 _GOLDEN = Path(__file__).resolve().parents[1] / "harness/evals/datasets/atlas_golden.csv"
 

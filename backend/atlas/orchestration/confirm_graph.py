@@ -1,4 +1,4 @@
-"""The propose -> confirm -> execute machine as a LangGraph graph (02-app-spec).
+"""The propose -> confirm -> execute machine as a LangGraph graph.
 
 `interrupt()` + the checkpointer IS the confirmation gate. The side effect that binds the
 idempotency key lives in `propose`, BEFORE the interrupt checkpoint, so it is never re run on

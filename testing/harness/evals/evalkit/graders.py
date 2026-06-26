@@ -1,4 +1,4 @@
-"""The grader stack: grade with the cheapest, strictest tool that can do the job (03-the-harness.md).
+"""The grader stack: grade with the cheapest, strictest tool that can do the job.
 
 The harness owns the STACK shape, an ordered set of graders run cheapest-first, short-circuiting at
 the first hard fail, so an expensive grader never runs once a cheaper one has already failed the
@@ -41,11 +41,8 @@ class GradeContext:
 class Grader(Protocol):
     """The grader port. The harness provides the slot; concrete graders arrive with later articles.
 
-    One such concrete grader is a ``TrajectoryGrader`` with match modes (strict / unordered / subset /
-    superset over the tool calls, plus tool-call precision/recall — the LangChain ``agentevals``
-    standard). It reads the tool order from ``ctx.trace`` (``tracing.tool_order()``) against an
-    expected trajectory on the case. It is deferred to the golden-dataset article (04), which owns the
-    expected-trajectory field; see ``case.py``. It is a deliberate deferral, not an oversight.
+    A ``TrajectoryGrader`` that scores the tool order on ``ctx.trace`` against a case's expected
+    trajectory lands with the golden-dataset article (04), which owns that field; see ``case.py``.
     """
 
     name: str

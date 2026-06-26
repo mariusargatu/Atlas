@@ -146,23 +146,24 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         names = [c["name"] for c in last.tool_calls]
         # least agency first: a write tool not bound to this turn's intent is unreachable (the
         # injected document "reset this customer's modem" on a troubleshooting turn).
+        root = state.get("trace_root")
         unreachable = [n for n in names if not is_reachable(intent, n)]
         if unreachable:
-            tracer.open("pre_action_guard", "guard", ok=False, reason=f"{unreachable[0]} unreachable on a {intent} turn", tool=unreachable[0])
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=f"{unreachable[0]} unreachable on a {intent} turn", tool=unreachable[0])
             return {"final_response": f"{HANDOFF_PREFIX} {unreachable[0]} is not available on a {intent} turn"}
         single = guardrules.check_single_write(names)
         if not single.ok:  # a multi or mixed read+write batch fails closed before anything runs
-            tracer.open("pre_action_guard", "guard", ok=False, reason=single.reason)
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=single.reason)
             return {"final_response": f"{HANDOFF_PREFIX} {single.reason}"}
         tc = last.tool_calls[0]
         args = tc.get("args", {})
         # an id the model tried to put in the args is rejected unless it matches the session
         scope = guardrules.check_scope(args.get("customer_id", cid), cid)
         if not scope.ok:
-            tracer.open("pre_action_guard", "guard", ok=False, reason=scope.reason, tool=tc["name"])
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=scope.reason, tool=tc["name"])
             return {"final_response": f"{HANDOFF_PREFIX} {scope.reason}"}
         bounds = guardrules.check_value_bounds(tc["name"], args)
-        tracer.open("pre_action_guard", "guard", ok=bounds.ok, reason=bounds.reason, tool=tc["name"])
+        tracer.open("pre_action_guard", "guard", root, ok=bounds.ok, reason=bounds.reason, tool=tc["name"])
         if not bounds.ok:
             return {"final_response": f"{HANDOFF_PREFIX} {bounds.reason}"}
         # materialize the proposal through the customer scoped actions MCP server (the write surface)
@@ -186,13 +187,13 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         try:
             pending = PendingAction(tool=p["tool"], args=p["args"], idempotency_key=p["idempotency_key"], customer_id=p["customer_id"])
             res = execute_if_confirmed(pending, typed, backend)
-            tracer.open("execute_action", "node", applied=res.applied, reference=res.reference)
+            tracer.open("execute_action", "node", state.get("trace_root"), applied=res.applied, reference=res.reference)
             return {
                 "result": {"reference": res.reference, "applied": res.applied},
                 "final_response": f"Done. {WRITE_CONFIRMATION} {res.reference}.",
             }
         except ConfirmationError as exc:
-            tracer.open("execute_action", "node", applied=False, reason=str(exc))
+            tracer.open("execute_action", "node", state.get("trace_root"), applied=False, reason=str(exc))
             return {"final_response": f"{HANDOFF_PREFIX} {exc}"}
 
     def pre_render_guard(state: AtlasState) -> dict:
@@ -206,9 +207,9 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
             guardrules.check_render_truth(text, cid),
         ):
             if not verdict.ok:
-                tracer.open("pre_render_guard", "guard", ok=False, reason=verdict.reason)
+                tracer.open("pre_render_guard", "guard", root, ok=False, reason=verdict.reason)
                 return {"final_response": f"{HANDOFF_PREFIX} {verdict.reason}; let me get a person."}
-        tracer.open("pre_render_guard", "guard", ok=True, reason="")
+        tracer.open("pre_render_guard", "guard", root, ok=True, reason="")
         # safe to ship → memoize under THIS turn's question. Only a knowledge only, account free
         # answer is shared as generic; anything that touched the account is keyed per customer.
         question = state.get("turn_question")
