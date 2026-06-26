@@ -5,7 +5,7 @@ token, never the request body (principle 1). `thread_id` is namespaced server si
 one customer can never resume another's pending interrupt. The graph (with its checkpointer) is a
 single long lived object, so a `/chat` interrupt and its `/chat/resume` share confirmation state.
 
-Streaming is a non goal in v1 (00-overview): every turn is request/response. The model + graph are
+Streaming is a non goal in v1: every turn is request/response. The model + graph are
 injected so tests wire a replayed gateway and an in memory backend (hermetic), exactly like the
 rest of the suite.
 """
@@ -103,7 +103,7 @@ def make_chat_app(clock, graph, *, cors_origins: list[str] | None = None) -> Fas
     # ---- auth ----
     @app.post("/auth/login", response_model=AuthOut)
     def login(body: LoginBody, response: Response) -> dict:
-        """Demo sign in AS a seeded customer (no password). Real auth is out of scope (00-overview)."""
+        """Demo sign in AS a seeded customer (no password). Real auth is out of scope."""
         if body.customer_id not in SEED:
             raise HTTPException(status_code=404, detail="unknown customer")
         now = clock.now()
@@ -119,8 +119,8 @@ def make_chat_app(clock, graph, *, cors_origins: list[str] | None = None) -> Fas
     @app.post("/auth/step-up", response_model=AuthOut)
     def step_up(ctx: dict = Depends(require_scope("read"))) -> dict:
         """Step up authorization: elevate an authenticated read session to a short lived write token
-        for the turn that confirms an action. A production system gates this on re auth (password/MFA);
-        the demo elevates on a valid read token. The write scope is never minted at login."""
+        for the turn that confirms an action. A production system gates this on re auth (password/MFA).
+        The demo elevates on a valid read token. The write scope is never minted at login."""
         cid = ctx["customer_id"]
         access = issue_token(cid, ["read", "write"], clock.now(), ttl_seconds=_ACCESS_TTL)
         return {"access_token": access, "customer_id": cid, "name": SEED[cid].name}

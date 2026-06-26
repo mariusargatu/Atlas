@@ -1,4 +1,4 @@
-"""Evals: grade the agent (the second of the two machines, 03-the-harness.md).
+"""Evals: grade the agent (the second of the two machines).
 
 The regression lane asks "did a pinned behaviour change?" — binary, gating. This half
 asks "how good is the agent, and is it getting better or worse?" It drives the agent

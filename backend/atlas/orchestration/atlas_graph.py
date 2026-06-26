@@ -1,10 +1,10 @@
 """The unified Atlas graph, the runtime the architecture article draws.
 
-agent decides; routing splits answer / read / act. The act path goes through the fail closed
+agent decides, and routing splits answer / read / act. The act path goes through the fail closed
 `pre_action_guard` and the confirmation `interrupt()`. The answer path goes through
 `pre_render_guard`, which is the LAST place a fee claim that contradicts the account is caught
 and held (the cold open's runtime catch). Identity lives in the non model `session` channel.
-Reads run over the account MCP server (in memory transport); the write executes via the actions
+Reads run over the account MCP server (in memory transport). The write executes via the actions
 backend behind the confirmation gate.
 """
 from __future__ import annotations
@@ -82,12 +82,12 @@ async def _actions_call(customer_id: str, tool: str, args: dict) -> str:
 
 def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkpointer, retriever=None, tracer=None, cache=None):
     retriever = retriever or InMemoryRetriever()
-    tracer = tracer or NullTracer()  # observation is opt in; the runtime is always instrumented
+    tracer = tracer or NullTracer()  # observation is opt in, but the runtime is always instrumented
     cache = cache or PerCustomerCache()  # per customer keying, a generic answer is shared, a bill is not
 
     async def agent(state: AtlasState) -> dict:
         messages = state["messages"]
-        # A fresh user turn is the only hop whose last message is a HumanMessage; a tool loop
+        # A fresh user turn is the only hop whose last message is a HumanMessage. A tool loop
         # re entry ends in a ToolMessage. Under the checkpointer, state persists across turns on a
         # thread, so the turn span / cache lookup / per turn flags must reset HERE, per turn, keying
         # off the CURRENT question, never the conversation's first one.
@@ -95,11 +95,11 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         extra: dict = {}
         if fresh_turn:
             question = _text_of(messages[-1])
-            # intent is set per turn (caller may pin it on the session; else classified) and binds
+            # intent is set per turn (caller may pin it on the session, else classified) and binds
             # which tools are reachable for the whole turn, least agency, decided before the model acts.
             intent = state["session"].get("intent") or classify_intent(question)
             # record the BOUND intent on the turn span, so a grader/drift lane reads what the runtime
-            # actually bound (and could see it move), not a re-derivation from the raw utterance.
+            # actually bound (and could see it move), not a fresh derivation from the raw utterance.
             root = tracer.open("turn", "turn", input=question, intent=intent)
             extra = {"trace_root": root, "turn_question": question, "intent": intent,
                      "used_account": False, "used_knowledge": False}
@@ -146,23 +146,24 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         names = [c["name"] for c in last.tool_calls]
         # least agency first: a write tool not bound to this turn's intent is unreachable (the
         # injected document "reset this customer's modem" on a troubleshooting turn).
+        root = state.get("trace_root")
         unreachable = [n for n in names if not is_reachable(intent, n)]
         if unreachable:
-            tracer.open("pre_action_guard", "guard", ok=False, reason=f"{unreachable[0]} unreachable on a {intent} turn", tool=unreachable[0])
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=f"{unreachable[0]} unreachable on a {intent} turn", tool=unreachable[0])
             return {"final_response": f"{HANDOFF_PREFIX} {unreachable[0]} is not available on a {intent} turn"}
         single = guardrules.check_single_write(names)
         if not single.ok:  # a multi or mixed read+write batch fails closed before anything runs
-            tracer.open("pre_action_guard", "guard", ok=False, reason=single.reason)
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=single.reason)
             return {"final_response": f"{HANDOFF_PREFIX} {single.reason}"}
         tc = last.tool_calls[0]
         args = tc.get("args", {})
         # an id the model tried to put in the args is rejected unless it matches the session
         scope = guardrules.check_scope(args.get("customer_id", cid), cid)
         if not scope.ok:
-            tracer.open("pre_action_guard", "guard", ok=False, reason=scope.reason, tool=tc["name"])
+            tracer.open("pre_action_guard", "guard", root, ok=False, reason=scope.reason, tool=tc["name"])
             return {"final_response": f"{HANDOFF_PREFIX} {scope.reason}"}
         bounds = guardrules.check_value_bounds(tc["name"], args)
-        tracer.open("pre_action_guard", "guard", ok=bounds.ok, reason=bounds.reason, tool=tc["name"])
+        tracer.open("pre_action_guard", "guard", root, ok=bounds.ok, reason=bounds.reason, tool=tc["name"])
         if not bounds.ok:
             return {"final_response": f"{HANDOFF_PREFIX} {bounds.reason}"}
         # materialize the proposal through the customer scoped actions MCP server (the write surface)
@@ -186,13 +187,13 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         try:
             pending = PendingAction(tool=p["tool"], args=p["args"], idempotency_key=p["idempotency_key"], customer_id=p["customer_id"])
             res = execute_if_confirmed(pending, typed, backend)
-            tracer.open("execute_action", "node", applied=res.applied, reference=res.reference)
+            tracer.open("execute_action", "node", state.get("trace_root"), applied=res.applied, reference=res.reference)
             return {
                 "result": {"reference": res.reference, "applied": res.applied},
                 "final_response": f"Done. {WRITE_CONFIRMATION} {res.reference}.",
             }
         except ConfirmationError as exc:
-            tracer.open("execute_action", "node", applied=False, reason=str(exc))
+            tracer.open("execute_action", "node", state.get("trace_root"), applied=False, reason=str(exc))
             return {"final_response": f"{HANDOFF_PREFIX} {exc}"}
 
     def pre_render_guard(state: AtlasState) -> dict:
@@ -206,11 +207,11 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
             guardrules.check_render_truth(text, cid),
         ):
             if not verdict.ok:
-                tracer.open("pre_render_guard", "guard", ok=False, reason=verdict.reason)
+                tracer.open("pre_render_guard", "guard", root, ok=False, reason=verdict.reason)
                 return {"final_response": f"{HANDOFF_PREFIX} {verdict.reason}; let me get a person."}
-        tracer.open("pre_render_guard", "guard", ok=True, reason="")
+        tracer.open("pre_render_guard", "guard", root, ok=True, reason="")
         # safe to ship → memoize under THIS turn's question. Only a knowledge only, account free
-        # answer is shared as generic; anything that touched the account is keyed per customer.
+        # answer is shared as generic. Anything that touched the account is keyed per customer.
         question = state.get("turn_question")
         if question is not None:
             generic = bool(state.get("used_knowledge")) and not state.get("used_account")
@@ -227,7 +228,7 @@ def build_atlas_graph(model: BaseChatModel, ids, backend: ActionsBackend, checkp
         return "read"
 
     def route_after_read(state: AtlasState) -> str:
-        # a binding block sets final_response and ends; otherwise loop back for the model to answer
+        # a binding block sets final_response and ends, otherwise loop back for the model to answer
         return "blocked" if state.get("final_response") else "loop"
 
     g = StateGraph(AtlasState)

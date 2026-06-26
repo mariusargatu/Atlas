@@ -1,4 +1,4 @@
-"""Canonicalization + the run digest contract (ADR-007 / 03-test-architecture.md).
+"""Canonicalization + the run digest contract (ADR-007).
 
 The cassette key and the run digest are only as deterministic as this module. Rules:
 sorted keys, money as a value normalized Decimal (never a float), dates as ISO 8601
@@ -29,15 +29,25 @@ REQUEST_ALLOW = (
     "stop",
 )
 
-#: Structural request fields the gateway sets explicitly (not forwarded from caller kwargs).
-REQUEST_STRUCTURAL = ("model_id", "system", "messages")
+#: Structural request fields `build_request` sets itself (not forwarded from caller kwargs). Everything
+#: else in REQUEST_ALLOW, `system` included, is a forwarded kwarg, so a caller that passes `system=`
+#: shapes the key instead of having it silently dropped.
+REQUEST_STRUCTURAL = ("model_id", "messages")
 
 
 def canonical(value: Any) -> Any:
     """Normalize a value into a JSON serializable, canonical form.
 
-    dicts -> sorted keys; Decimal -> exact quantized string; float -> stable repr;
-    datetime/date -> ISO 8601. Bool is preserved (and handled before int fall-through).
+    dicts -> sorted keys, Decimal -> exact quantized string, float -> stable repr,
+    datetime/date -> ISO 8601. Bool is preserved (and handled before int fall through).
+
+    Scalars carry a type tag (``D:``/``F:``) so a Decimal and a float that print alike key apart.
+    Strings are left untagged on purpose: tagging them would rewrite every recorded message and so
+    every committed cassette key, and the cold open cassette cannot be re-recorded without a live
+    model. The payloads this keys over never mix a raw string with a tagged scalar (money is always
+    Decimal, prose always string), so the tags stay collision free in practice (pinned by
+    ``test_determinism.test_scalar_type_tags_keep_a_decimal_and_a_float_apart``). A general
+    content addressed store would tag strings too.
     """
     if isinstance(value, dict):
         return {k: canonical(v) for k, v in sorted(value.items())}

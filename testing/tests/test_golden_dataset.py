@@ -1,8 +1,8 @@
 """The golden dataset layer (04): access and metadata slicing.
 
-These pin the dataset-article machinery that surrounds the seed: the intermediary CSV and the
+These pin the dataset article machinery that surrounds the seed: the intermediary CSV and the
 canonical seed describe the same set, the metadata is sliceable, and the coverage adds up. Scoring
-the cases is the metrics article's job (05); silver-to-gold promotion and decontamination land with
+the cases is the metrics article's job (05). Silver to gold promotion and decontamination land with
 the production loop (12). This stops at the dataset boundary.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from evals.evalkit.case import EvalCase
-from evals.evalkit.golden import load_golden_drafts
+from evals.evalkit.golden_loader import load_golden_drafts
 from evals.evalkit.golden_set import (
     as_eval_cases,
     coverage,
@@ -22,7 +22,7 @@ _CSV = Path(__file__).resolve().parents[1] / "harness/evals/datasets/atlas_golde
 
 
 def test_intermediary_csv_describes_the_same_set_as_the_canonical_seed():
-    # The CSV is the explanation; seed.py is canonical. If their ids drift, the explanation lies.
+    # The CSV is the explanation, and seed.py is canonical. If their ids drift, the explanation lies.
     csv_ids = {d.id for d in load_golden_drafts(_CSV)}
     seed_ids = {c.id for c in golden_set()}
     assert csv_ids == seed_ids

@@ -1,8 +1,8 @@
-"""The propose -> confirm -> execute machine as a LangGraph graph (02-app-spec).
+"""The propose -> confirm -> execute machine as a LangGraph graph.
 
 `interrupt()` + the checkpointer IS the confirmation gate. The side effect that binds the
 idempotency key lives in `propose`, BEFORE the interrupt checkpoint, so it is never re run on
-resume (the `confirm_interrupt`-side effect free footgun). Execution runs the *stored pending*
+resume (the `confirm_interrupt` side effect free footgun). Execution runs the *stored pending*
 action with its bound key, so a timed out retry de duplicates.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ def build_confirm_graph(backend: ActionsBackend, ids, customer_id: str, plan_id:
         }
 
     def confirm(state: ConfirmState) -> dict:
-        typed = interrupt({"proposal": state["pending"]})  # pause; re entered with the typed value
+        typed = interrupt({"proposal": state["pending"]})  # pause, re entered with the typed value
         pending = PendingAction(**state["pending"])
         try:
             res = execute_if_confirmed(pending, typed, backend)

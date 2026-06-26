@@ -1,9 +1,9 @@
 """The determinism kit: every nondeterministic source pinned behind an injectable fixture.
 
-Replay pins the model; this pins everything else (principle 7): the clock, the RNG, id/reference
-generation, span ordering. The CI lane wires these frozen fixtures; dev/prod inject their own
+Replay pins the model. This pins everything else (principle 7): the clock, the RNG, id/reference
+generation, span ordering. The CI lane wires these frozen fixtures, and dev/prod inject their own
 (a real clock, a system RNG) at the same call sites, since the consumers only need `.now()`,
-`.next()`, etc. Duck typing, no base class required. See 03-the-harness.md.
+`.next()`, etc. Duck typing, no base class required.
 """
 from __future__ import annotations
 

@@ -1,9 +1,12 @@
 """Per intent tool binding, least agency (principle 11).
 
-Unauthorized actions are *unreachable*, not merely guarded: a troubleshooting turn never
-binds the actions tools, so an injected document that says "reset this customer's equipment"
-has no tool to reach. The strongest least agency control is not a check, it is the absence
-of the capability.
+Each turn binds an intent to a fixed set of tools, and the graph refuses to run any tool outside it.
+A troubleshooting turn binds knowledge and reads but never the write tools, so an injected document
+that says "reset this customer's equipment" hits a closed door: the graph intercepts the call and
+fails closed before it can execute (``atlas_graph.pre_action_guard``). In this reference runtime the
+model is the same regardless of intent and the binding is enforced as that intercept. A dev/prod
+build would also hand the model only the bound tools, so the capability is simply absent. Either way
+the reachable set is the same, decided before the model acts.
 """
 from __future__ import annotations
 
@@ -40,11 +43,11 @@ _ACTION_CUES = (
 def classify_intent(text: str) -> str:
     """Per turn intent, deterministic (no model call, so the hermetic lane stays reproducible).
 
-    ACTION if the user asks to change something; otherwise TROUBLESHOOTING, which binds knowledge +
+    ACTION if the user asks to change something. Otherwise TROUBLESHOOTING, which binds knowledge +
     reads but never the write tools. This keeps the load bearing invariant true at runtime. A write
     tool is simply unreachable on a non action turn (the injected document "reset this modem" attack).
     A production system would classify all four intents (or let the model propose intent under
-    review); this conservative split is what the hermetic suite enforces.
+    review). This conservative split is what the hermetic suite enforces.
     """
     low = text.lower()
     if any(cue in low for cue in _ACTION_CUES):

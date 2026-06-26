@@ -37,7 +37,8 @@ dependency group is not installed, so a cassette miss hard fails instead of goin
   cassettes.
 - **Identity never comes from the model.** `customer_id` is from the session/bearer token, never a
   tool argument. Flag any change that puts it in a tool schema.
-- **The guard is fail closed**; binding makes unauthorized tools *unreachable*, not merely denied.
+- **The guard is fail closed**; binding intercepts an unauthorized tool and fails closed before it
+  runs (a dev/prod build also withholds it from the model, so the capability is absent).
 - **Immutability**: domain objects are frozen dataclasses updated via `replace`; the single mutable
   boundary is the in memory account store (`domain/accounts.py:_STATE`).
 

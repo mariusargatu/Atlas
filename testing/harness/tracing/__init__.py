@@ -37,13 +37,20 @@ def spans_of_kind(spans, kind: str) -> list["Span"]:
 
 
 def tool_names(spans) -> list[str]:
-    """The trajectory: tool-span names in call order."""
+    """The trajectory: tool span names in call order."""
     return [s.name for s in spans_of_kind(spans, "tool")]
 
 
 def guard_outcomes(spans) -> list[tuple[str, bool]]:
     """(guard_name, ok) per guard span, in order. ok defaults False when a span is unannotated."""
     return [(s.name, bool(s.attributes.get("ok"))) for s in spans_of_kind(spans, "guard")]
+
+
+def write_applied(spans) -> bool:
+    """Did a write land? True iff some ``execute_action`` node span carries a truthy ``applied``.
+    The one definition, structural and never from prose, shared by the eval graders and the drift
+    lane so a renamed span or a changed rule moves here, not in two places that can silently diverge."""
+    return any(s.name == "execute_action" and s.attributes.get("applied") for s in spans_of_kind(spans, "node"))
 
 
 class Tracer(Protocol):
@@ -54,7 +61,7 @@ class Tracer(Protocol):
 
 
 class NullTracer:
-    """No op tracer. Runtime code is instrumented unconditionally; observation is opt in."""
+    """No op tracer. Runtime code is instrumented unconditionally, and observation is opt in."""
 
     def open(self, name: str, kind: str, parent: Optional[int] = None, **attrs) -> int:
         return -1
@@ -101,5 +108,5 @@ class InMemoryTracer:
 
 __all__ = [
     "InMemoryTracer", "NullTracer", "Span", "Tracer",
-    "spans_of_kind", "tool_names", "guard_outcomes",
+    "spans_of_kind", "tool_names", "guard_outcomes", "write_applied",
 ]
