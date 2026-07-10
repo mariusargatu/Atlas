@@ -27,7 +27,7 @@ record = [
     "langchain-anthropic>=0.3",
     "langchain-openai>=0.3",
     "anthropic>=0.40",
-    "openai>=1.50",
+    "openai>=2.45.0",
 ]
 # Local models via Ollama, a zero key, zero egress provider for the record/eval lanes (the agent
 # and/or the judge). Replay still gates; Ollama only feeds the recorder. nomic-embed-text can also
