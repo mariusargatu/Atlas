@@ -58,6 +58,7 @@ omit = [
     "testing/harness/evals/inference_oracle/__main__.py", # differential oracle demo (task oracle), operator-run
     "testing/harness/evals/judge/__main__.py",            # judge calibration study (task judge), operator-run
     "testing/harness/evals/judge/live_calibration.py",    # LIVE judge probe (task judge-live), needs keys + egress
+    "testing/harness/evals/benchmark/__main__.py",        # honest benchmark study (task benchmark), run by an operator
     "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
     "backend/atlas/ports/*",                     # Protocol definitions, signatures, not behaviour
 ]

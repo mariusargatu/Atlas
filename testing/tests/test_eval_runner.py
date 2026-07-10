@@ -2,9 +2,10 @@
 
 This is the eval harness testing ITSELF: the same runner the nightly LIVE lane uses, run on the
 pinned gateway so the test is deterministic and has zero egress. On REPLAY every trial is identical,
-so a rate is 0 or 1; that is the point, it proves the driver, the grader stack, the planner seam,
-and the aggregation WIRING without a live model. The concrete graders (oracle rules, the judge) and
-confidence intervals belong to later articles; here the grader is the trivial ``PredicateGrader``.
+so a rate is 0 or 1. That is the point, it proves the driver, the grader stack, the planner seam,
+and the aggregation WIRING without a live model. The concrete graders (oracle rules, the judge)
+belong to later articles. Here the grader is the trivial ``PredicateGrader``. The report itself is
+held to the statistics article's law: no rate ships without its interval, and the gate reads the floor.
 """
 from __future__ import annotations
 
@@ -16,7 +17,9 @@ from evals.evalkit.graders import Composite, GradeContext, PredicateGrader, Verd
 from evals.evalkit.planner import StaticPlanner
 from evals.evalkit.report import build_report, run_suite
 from evals.evalkit.runner import CaseResult, TrialResult, _drive, _trial_passed, run_case
+from evals.gate import GateVerdict
 from evals.scaffold import build_replay_graph
+from evals.stats import wilson_interval
 
 _MODEL_ID = "claude-test"
 
@@ -73,7 +76,7 @@ async def test_run_case_rejects_zero_k(tmp_path):
 
 @pytest.mark.asyncio
 async def test_drive_runs_every_turn_on_one_thread():
-    # A multi-turn case is a real conversation: all turns share one thread_id, so under the
+    # A case with multiple turns is a real conversation: all turns share one thread_id, so under the
     # checkpointer turn 2 resumes turn 1's state instead of starting cold.
     seen = []
 
@@ -87,7 +90,7 @@ async def test_drive_runs_every_turn_on_one_thread():
     assert seen == ["multi-trial0", "multi-trial0", "multi-trial0"]
 
 
-# ---- the grader stack (machinery only; concrete graders arrive with later articles) ----
+# ---- the grader stack (machinery only, concrete graders arrive with later articles) ----
 
 def test_predicate_grader_reports_pass_and_fail():
     assert PredicateGrader("p", lambda ctx: True).grade(_ctx("x")).passed
@@ -135,7 +138,7 @@ async def test_run_suite_aggregates_many_cases_into_one_report(tmp_path, seed_ca
 @pytest.mark.asyncio
 async def test_run_suite_resolves_per_case_graders_from_a_registry(tmp_path, seed_cassette):
     # A {name: Grader} registry: each case is graded by ONLY the grader(s) it declares, so a
-    # mixed-risk suite is expressible through run_suite (not just a single uniform grader list).
+    # mixed risk suite is expressible through run_suite (not just a single uniform grader list).
     _seed(seed_cassette, tmp_path, "Tell me about my plan", "Your current plan is flexible.")
     _seed(seed_cassette, tmp_path, "What is a data cap?", "")  # empty -> the "shipped" grader fails
     registry = {"shipped": _SHIPPED}
@@ -151,7 +154,7 @@ async def test_run_suite_resolves_per_case_graders_from_a_registry(tmp_path, see
     assert by_id["empty"].passes == 0         # graded by the same rule, no text shipped
 
 
-# ---- the three-agent harness: planner (designs) -> generator (graph) -> evaluator (graders) ----
+# ---- the three agent harness: planner (designs) -> generator (graph) -> evaluator (graders) ----
 
 def test_static_planner_returns_its_fixed_case_set():
     cases = (EvalCase(id="a", turns=("hi",), customer_id="cust_current"),)
@@ -160,7 +163,7 @@ def test_static_planner_returns_its_fixed_case_set():
 
 @pytest.mark.asyncio
 async def test_three_roles_stay_separate_planner_drives_generator_graded_by_evaluator(tmp_path, seed_cassette):
-    # The planner designs the tasks; the generator (the Atlas graph) produces the runs; the
+    # The planner designs the tasks. The generator (the Atlas graph) produces the runs. The
     # evaluator (the grader stack) grades them. Three roles, never one agent marking its own exam.
     _seed(seed_cassette, tmp_path, "Tell me about my plan", "Your current plan is flexible.")
     planner = StaticPlanner([EvalCase(id="plan", turns=("Tell me about my plan",), customer_id="cust_current")])
@@ -190,6 +193,69 @@ def test_report_serializes_to_json_friendly_dict():
     body = report.as_dict()
     assert body["overall"]["trials"] == 10 and body["overall"]["rate"] == 0.5
     assert body["cases"][0]["id"] == "a" and body["cases"][0]["rate"] == 0.5
+
+
+# ---- no bare point estimates: every rate the report ships carries its interval ----
+
+
+def test_every_rate_ships_with_its_wilson_interval():
+    report = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)])
+    body = report.as_dict()
+    assert body["overall"]["ci95"] == list(wilson_interval(16, 20))
+    assert body["cases"][0]["ci95"] == list(wilson_interval(7, 10))
+    assert body["cases"][1]["ci95"] == list(wilson_interval(9, 10))
+
+
+def test_reporter_lint_no_dict_carries_a_rate_without_an_interval():
+    # The reporting law as a meta test (the analog of "no silent caps"): walk everything
+    # the report serializes, and any node that quotes a rate must quote its uncertainty.
+    # A future field added to the trend row cannot silently ship a bare point estimate.
+    def walk(node):
+        if isinstance(node, dict):
+            if "rate" in node:
+                lo, hi = node["ci95"]
+                assert 0.0 <= lo <= node["rate"] <= hi <= 1.0
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 0, 5)]).as_dict())
+
+
+def test_empty_report_admits_it_knows_nothing():
+    # Zero trials is the widest interval, never a confident 0% with false certainty.
+    body = build_report([]).as_dict()
+    assert body["overall"]["rate"] == 0.0
+    assert body["overall"]["ci95"] == [0.0, 1.0]
+
+
+def test_render_header_carries_the_interval():
+    out = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)]).render()
+    lo, hi = wilson_interval(16, 20)
+    assert f"Wilson 95% CI [{lo:.3f}, {hi:.3f}]" in out
+
+
+# ---- the report gates on the floor, never the point ----
+
+
+def test_report_gates_on_the_lower_bound_not_the_point():
+    # 16/20 is a 0.80 point with a floor near 0.58: it must NOT clear a 0.75 bar.
+    report = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)])
+    decision = report.gate(threshold=0.75, variance_budget=0.5)
+    assert decision.verdict is GateVerdict.FAIL
+    assert report.overall_rate >= 0.75  # the point clears, but the gate still holds the release
+
+
+def test_report_gate_passes_when_the_floor_clears():
+    report = build_report([_synthetic_case("a", 96, 100), _synthetic_case("b", 98, 100)])
+    assert report.gate(threshold=0.90, variance_budget=0.10).verdict is GateVerdict.PASS
+
+
+def test_report_gate_quarantines_an_interval_wider_than_the_budget():
+    report = build_report([_synthetic_case("a", 4, 5)])  # n=5: honest width is huge
+    assert report.gate(threshold=0.5, variance_budget=0.2).verdict is GateVerdict.QUARANTINE
 
 
 # ---- the readable surface: name/risk flow through, render() reads as outcomes ----

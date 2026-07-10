@@ -100,3 +100,8 @@ tasks:
     desc: LIVE judge-calibration probe — real model, real account facts, real cost. Sweeps OpenAI tiers cheapest-first (needs OPENAI_API_KEY, egress; never the PR lane).
     cmds:
       - PYTHONPATH=backend:testing/harness:. uv run --all-groups --env-file .env python testing/harness/evals/judge/live_calibration.py
+
+  benchmark:
+    desc: "honest benchmark study: the regression that wasn't. 84 vs 81 on n=100 with overlapping CIs and a paired test (p~0.55). No keys, seeded, reproducible."
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.benchmark

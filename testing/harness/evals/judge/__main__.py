@@ -4,28 +4,29 @@ This is the portfolio artifact the whole judge discipline turns on: a judge that
 better than chance and was dragged above the bar by ONE documented correction, with every config
 versioned. It tells the story as an outcome a reviewer can read.
 
-A cross-family judge (model_id ``gpt-judge``, deliberately not the Claude family the agent runs on)
-scores the human-labelled calibration set twice, through the same record/replay gateway as the
+A cross family judge (model_id ``gpt-judge``, deliberately not the Claude family the agent runs on)
+scores the human labelled calibration set twice, through the same record/replay gateway as the
 agent. First under the naive helpfulness rubric (V1), which rewards the fluent but false answers and
-penalises the terse but true ones; its agreement with the humans comes back at Cohen's κ ≈ 0.29, a
-dashboard that was lying. Then under the corrected account-truth rubric (V2), the single named
-change; agreement jumps to κ ≈ 0.85 and clears the 0.6 automation bar.
+penalises the terse but true ones. Its agreement with the humans comes back at Cohen's κ ≈ 0.29, a
+dashboard that was lying. Then under the corrected account truth rubric (V2), the single named
+change. Agreement jumps to κ ≈ 0.85 and clears the 0.6 automation bar.
 
 On REPLAY every judge verdict is served from a committed cassette, so the κ reproduces byte-for-byte
 and the study is a committed artifact, not a number asserted on a slide.
 
 Two things a LIVE run needs that REPLAY supplies for free, named here so the artifact is not read as
 more than it is. First, the V2 rubric scores truth "against the account", but the prompt carries only
-the question and the answer; the recorded verdicts encode the account truth an SME applied, so a real
+the question and the answer. The recorded verdicts encode the account truth an SME applied, so a real
 judge would need those facts threaded into its prompt to earn the same κ. Second, the verdict parser
-expects the one-word PASS/FAIL (and A/B) the prompt asks for; a verbose live reply is parsed by its
-first clear token, a deliberate constraint, not a free-text reader.
+expects the one word PASS/FAIL (and A/B) the prompt asks for. A verbose live reply is parsed by its
+first clear token, a deliberate constraint, not a free text reader.
 """
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
+from evals.artifacts import write_artifacts
 from replay.cassette_store import seed_cassette
 from replay.gateway import GatewayChatModel
 
@@ -35,7 +36,7 @@ from evals.judge.contract import JudgeContract
 from evals.judge.llm_judge import judge_label, order_swap
 from evals.judge.rubric import RUBRIC_V1, RUBRIC_V2, compare_prompt, prompt, template_hash
 
-JUDGE_MODEL_ID = "gpt-judge"  # a different family than the agent (Claude); the cross-family defence
+JUDGE_MODEL_ID = "gpt-judge"  # a different family than the agent (Claude). The cross family defence
 
 ARTIFACT = Path(__file__).parent / "artifacts" / "calibration_study.md"
 
@@ -55,10 +56,10 @@ def _run(cassette_dir, rubric) -> list[int]:
 
 
 def _order_swap_demo(cassette_dir) -> float:
-    """A tiny position-bias probe: one consistent pair and one flipping pair, under V2.
+    """A tiny position bias probe: one consistent pair and one flipping pair, under V2.
 
     Seeds the four comparison readings so the gateway replays a judge that is consistent on a clear
-    pair (true vs false, both orders pick the true answer) and order-dependent on a hard pair (picks
+    pair (true vs false, both orders pick the true answer) and order dependent on a hard pair (picks
     whichever it saw first). The flip rate quantifies the position bias.
     """
     q = "Is there a cap on my data?"
@@ -138,10 +139,7 @@ def _study() -> str:
 
 def main() -> None:
     study = _study()
-    ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
-    ARTIFACT.write_text(study)
-    print(study)
-    print(f"\n(committed artifact written to {ARTIFACT.relative_to(Path.cwd()) if ARTIFACT.is_relative_to(Path.cwd()) else ARTIFACT})")
+    write_artifacts([(ARTIFACT, study)], echo=study)
 
 
 if __name__ == "__main__":
