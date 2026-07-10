@@ -1,0 +1,43 @@
+name: judge-live
+
+# On demand keyed provisional calibration probe (registry truth agreement + judge vs judge kappa,
+# both PROVISIONAL, neither licenses deployment). workflow_dispatch only, never on a schedule or a
+# push/pull_request trigger: a human triggers this, reads the uploaded artifact, and diffs it
+# against the committed testing/harness/judge/artifacts/live_provisional/latest.md before deciding
+# whether to commit a new dated snapshot. Mirrors the `task judge-live` Taskfile target.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  judge-live:
+    name: live judge provisional calibration probe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the live judge provisional calibration probe (needs OPENAI_API_KEY and/or ANTHROPIC_API_KEY, egress)
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          OMP_NUM_THREADS: "1"
+          PYTHONPATH: backend:testing/harness:.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run --all-groups python testing/harness/judge/live_provisional.py
+
+      - name: Upload calibration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: judge-live-provisional
+          path: testing/harness/judge/artifacts/live_provisional/
+          if-no-files-found: error

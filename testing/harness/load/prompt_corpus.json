@@ -1,0 +1,38 @@
+[
+  {
+    "prompt_id": "short-price",
+    "bucket": "short",
+    "text": "What is the monthly price of Fiber 500?",
+    "approx_tokens": 8
+  },
+  {
+    "prompt_id": "short-cap",
+    "bucket": "short",
+    "text": "Is there a data cap on the Fiber 500 plan?",
+    "approx_tokens": 10
+  },
+  {
+    "prompt_id": "medium-router",
+    "bucket": "medium",
+    "text": "My router keeps dropping the connection every evening around dinner time and I have already tried unplugging it for thirty seconds, so what else can I check before booking a technician visit?",
+    "approx_tokens": 32
+  },
+  {
+    "prompt_id": "medium-billing",
+    "bucket": "medium",
+    "text": "I was charged an early termination fee after I moved to a new address inside the same coverage area, and I would like to understand whether that fee is waived when the move is within the footprint.",
+    "approx_tokens": 37
+  },
+  {
+    "prompt_id": "long-outage",
+    "bucket": "long",
+    "text": "Yesterday afternoon my internet went out for about two hours right in the middle of a video call with my team, and when service came back the speeds felt much slower than usual for the rest of the evening even though the plan I am on is supposed to guarantee a minimum download speed; I want to know whether this counts toward a service credit and what the process looks like for requesting one.",
+    "approx_tokens": 74
+  },
+  {
+    "prompt_id": "long-upgrade",
+    "bucket": "long",
+    "text": "We are a household of five people who all stream video, play online games, and take video calls for work at the same time most evenings, and our current plan feels too slow during that window, so I would like a clear comparison of the next two tiers above what we have now, including whether either one comes with a contract, an equipment fee, or a promotional price that changes after the first year.",
+    "approx_tokens": 74
+  }
+]

@@ -1,0 +1,212 @@
+name: release
+
+# Release identity (D37, SP6 task 6): "CI builds images tagged by git SHA and deploys them BY
+# DIGEST via a committed helmfile.lock; resolved digests join the run manifest. A /version endpoint
+# returns git SHA, contract tuple, corpus_version, and the active index_build_id... CHANGELOG.md
+# carries entries at sub project completions and contract MAJORs; the contract diff script fails CI
+# if a MAJOR lands without an entry" (the dual plane HLD section 7.5).
+# /version itself is served by backend/atlas/server.py (this same task); this file is the other two
+# thirds: the CHANGELOG gate's git aware half, and the pipeline that computes helmfile.lock and
+# builds a release identity artifact naming the image digests.
+#
+# PUSH ACTIVATED BY DESIGN, same posture as .github/workflows/janitor.yml: this file is complete,
+# reviewed code, but runs nowhere until a maintainer pushes this branch/commit to GitHub (this
+# session's own HARD SAFETY RULE: never `git push`). No extra repo secret is needed for the
+# changelog-gate job; release-identity needs `packages: write` (declared below) to push to GHCR,
+# which GITHUB_TOKEN already grants with zero manual setup, unlike janitor.yml's HCLOUD_TOKEN.
+#
+# HONEST DISCLOSURE on the helmfile.lock step (verified locally, read only, before writing this
+# file: `helmfile -e local deps` against this repo's actual infra/helmfile.yaml): every release in
+# that file names a LOCAL chart path (`./charts/...`, including the vendored
+# `./charts/vendor/cloudnative-pg`), and helmfile.yaml declares no `repositories:` section at all.
+# `helmfile deps` therefore prints "There are no repositories defined in your helmfile.yaml. This
+# means helmfile cannot update your dependencies or create a lock file." and exits 0 with NO lock
+# file produced -- today, this step is a real, complete, but currently a no op command. It becomes
+# real work automatically, with no code change here, the day any chart moves off a vendored local
+# path onto a live Helm/OCI repository (the exact "complete code, gated only by a real precondition"
+# discipline infra/scripts/burst-up.sh already holds itself to for its own credential gate).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The git aware half of the CHANGELOG gate (contract_tools.changelog_gate.git_gate, `task
+  # contracts:changelog-gate`): a contracts/*/schema.json change with no CHANGELOG.md change in the
+  # same diff fails here. The hermetic half (CHANGELOG.md's recorded tuple matches
+  # contract_tools.loader.contract_versions()) already runs inside `task test` on every PR via
+  # ci.yml's own hermetic-pr-lane; this job runs it again too (git_gate calls check_consistency at the
+  # end) so a git aware run also catches a same commit CHANGELOG edit that recorded the wrong tuple.
+  #
+  # Meaningful on a `pull_request` event (diffs the PR head against its target's `main`, the
+  # scenario `contract_tools.diff`'s own `--git-ref main` default was built for, per SP1's ledger
+  # note "task contracts:diff default REF=main exits 2 until branch merges, expected"). On a `push`
+  # to `main` itself the diff is against the SAME commit that was just pushed (main already moved),
+  # so it is a harmless no op there, not a false pass: nothing to catch because nothing changed
+  # relative to itself.
+  changelog-gate:
+    name: contracts changelog gate (git aware half)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: `git diff main...HEAD` needs origin/main reachable
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: contracts changelog gate against origin/main
+        run: task contracts:changelog-gate REF=origin/main
+
+  # Release identity: images by digest, helmfile.lock, and a release manifest artifact naming those
+  # digests in the contracts/manifest schema's own reserved field. Only on an actual push to `main`
+  # (or a manual dispatch) -- a pull_request has nothing to release yet.
+  release-identity:
+    name: release identity (helmfile.lock, image digests, /version's own data)
+    if: github.event_name != 'pull_request'
+    needs: changelog-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commits helmfile.lock back to the branch when it changes
+      packages: write   # pushes the three images to GHCR
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Install helmfile + helm
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/helm.tar.gz https://get.helm.sh/helm-v4.2.3-linux-amd64.tar.gz
+          tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          curl -fsSL -o /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.7.1/helmfile_1.7.1_linux_amd64.tar.gz
+          tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
+          sudo install -m 0755 /tmp/helmfile /usr/local/bin/helmfile
+
+      - name: Compute helmfile.lock (currently a no op, see this file's own header disclosure)
+        working-directory: infra
+        run: helmfile -e local deps
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Same three images infra/scripts/k3d-up.sh builds for the local k3d tier (same Dockerfiles,
+      # same build contexts, --provenance/--sbom disabled for the same single platform reason that
+      # script's own comment names), pushed here to a real registry (GHCR) instead of the k3d local
+      # one, tagged by git SHA per D37 ("images tagged by git SHA... deployed by digest").
+      - name: Build and push infra/images/postgres-pgvector
+        id: pgvector
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/images/postgres-pgvector
+          file: infra/images/postgres-pgvector/Dockerfile
+          push: true
+          provenance: false
+          sbom: false
+          tags: ghcr.io/${{ github.repository_owner }}/atlas-postgres-pgvector:${{ github.sha }}
+
+      - name: Build and push backend/Dockerfile
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          provenance: false
+          sbom: false
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: ghcr.io/${{ github.repository_owner }}/atlas-backend:${{ github.sha }}
+
+      - name: Build and push frontend/Dockerfile
+        id: web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          provenance: false
+          sbom: false
+          tags: ghcr.io/${{ github.repository_owner }}/atlas-web:${{ github.sha }}
+
+      # The dataset/manifest contract's own reserved field, joined here: contracts/manifest/
+      # schema.json's `image_digests` (an array of `sha256:...` strings) plus `git_sha` and
+      # `contract_versions`, the two other release identity fields that same schema also reserves.
+      # NOT a full manifest instance (a real run manifest needs run_id/prompt_hash/judge_id/... --
+      # fields only an actual eval run knows), so this is deliberately named release-manifest.json,
+      # not validated against the full schema: it reuses three of its reserved field NAMES on
+      # purpose, the same "surfaced, not computed elsewhere" discipline /version holds itself to.
+      - name: Assemble the release manifest (image digests joined by field name)
+        run: |
+          uv run python - <<'PY'
+          import json
+          import os
+          from contract_tools.loader import contract_versions
+
+          manifest = {
+              "git_sha": os.environ["GITHUB_SHA"],
+              "contract_versions": contract_versions(),
+              "image_digests": [
+                  os.environ["PGVECTOR_DIGEST"],
+                  os.environ["BACKEND_DIGEST"],
+                  os.environ["WEB_DIGEST"],
+              ],
+          }
+          os.makedirs("dist", exist_ok=True)
+          with open("dist/release-manifest.json", "w") as f:
+              json.dump(manifest, f, indent=2, sort_keys=True)
+          print(json.dumps(manifest, indent=2, sort_keys=True))
+          PY
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          PGVECTOR_DIGEST: ${{ steps.pgvector.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+          PYTHONPATH: backend:testing/harness:.
+
+      - name: Upload the release manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: dist/release-manifest.json
+
+      - name: Commit helmfile.lock if the deps step produced or changed one
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain infra/helmfile.lock 2>/dev/null)" ]]; then
+            git config user.name "atlas-release-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add infra/helmfile.lock
+            git commit -m "chore: update helmfile.lock"
+            git push
+          else
+            echo "infra/helmfile.lock unchanged (today: helmfile deps is a no op, see this file's own header disclosure)"
+          fi

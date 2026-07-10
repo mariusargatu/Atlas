@@ -1,0 +1,100 @@
+name: simulator
+
+# SP10 task 4 (HLD section 7.3's "Simulator" row): manual dispatch only, pre burst stage.
+# Runs `testing/harness/evals/simulation` (`task simulation`, the deterministic roster + mind-changer
+# proof) as a sanity check, then, when both provider keys are configured, the live cross model
+# persona driver + a SEPARATE calibrated evaluator (`task simulation:live`, `judge/simulator_lane.py`
+# -- SP8's own boundary: never the same model grading its own persona conversation), pass^k at k=4
+# (HLD 7.3's own phrase), persona adherence marking an episode INVALID (excluded from every rate, not
+# counted as a failed trial). NEVER GATES (D18, and the HLD's own lane table: Simulator "Never").
+#
+# INFRASTRUCTURE, NAMED (the SP10 digest's own 3g -- NOT infrastructure free): the live loop drives
+# the REAL atlas_graph through retrieval, exactly like `labeling.generate_label_set` already does, so
+# it needs a reachable TEI endpoint (`docker compose up postgres tei-embed tei-rerank rag-init`,
+# keyless retrieval) PLUS BOTH OPENAI_API_KEY and ANTHROPIC_API_KEY (one plays the persona, the other
+# evaluates -- a genuine cross model boundary needs two distinct families, never one key read twice).
+# "Manual, pre burst stage" names WHEN this runs, never that it needs zero infrastructure.
+#
+# LOCAL ONLY, DORMANT UNTIL PUSHED (the same posture janitor.yml/release.yml/live-pr.yml/
+# full-sweep.yml already carry): this file is complete, actionlint clean, reviewed code, but runs
+# nowhere until a maintainer pushes this branch/commit to GitHub AND configures BOTH the
+# OPENAI_API_KEY and ANTHROPIC_API_KEY repo secrets this job reads. "Verified" here means exactly
+# what it means for every other SP10 workflow: actionlint clean, every referenced Taskfile
+# target/script exists and runs locally, never "observed running on GitHub"
+# (testing/tests/test_simulator_workflow.py is the hermetic half of that claim; the pure pass^k
+# statistics and the cross model tier selection are additionally hermetically proven end to end with
+# REPLAY gateways on every role in testing/tests/test_judge_simulator_lane.py). Absent BOTH
+# configured secrets, the live-simulation job below reports a NEUTRAL skip (the same "the credential
+# doesn't exist yet either" reasoning janitor.yml's own HCLOUD_TOKEN gate already documents), not a
+# hard failure.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-simulation:
+    name: "cross model persona driver + separate evaluator, pass^k (k=4, report only, never gates)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Deterministic core (roster + mind-changer proof, no keys)
+        run: task simulation
+
+      - name: Check both provider keys are configured (persona driver AND evaluator, two distinct families)
+        id: gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [[ -z "${OPENAI_API_KEY:-}" || -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            echo "OPENAI_API_KEY and ANTHROPIC_API_KEY are not BOTH configured yet: skipping the live cross model simulation as a NEUTRAL run, not a failure (this lane is additive once a maintainer adds both repo secrets, Settings > Secrets and variables > Actions -- a genuine cross model boundary needs two distinct model families, never one key read twice)." >> "${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # Real retrieval against the CURRENT corpus (never the toy in memory fixture): the SUT graph's
+      # own live turns need a reachable TEI endpoint exactly like live-pr.yml/full-sweep.yml already
+      # bring up, the digest's own named infrastructure dependency (this lane is NOT infra free).
+      - name: Bring up Postgres + TEI (real retrieval, no provider key needed)
+        if: steps.gate.outputs.configured == 'true'
+        run: docker compose up -d --wait postgres tei-embed tei-rerank rag-init
+
+      - name: Re ingest the corpus at this commit
+        if: steps.gate.outputs.configured == 'true'
+        run: task rag:ingest
+
+      - name: Run the Simulator lane (cross model persona driver + separate evaluator, pass^k k=4; report only, never gates)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          MODEL_PROVIDER: anthropic
+          MODEL_ID: claude-sonnet-5
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: task simulation:live
+
+      - name: Upload the simulator lane report (pass^k per persona, never a required check)
+        if: always() && steps.gate.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-lane-report
+          path: testing/harness/judge/artifacts/simulator_lane/
+          if-no-files-found: warn # the driver may fail closed before writing an artifact; not fatal to the upload step itself

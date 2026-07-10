@@ -1,0 +1,98 @@
+name: janitor
+
+# HLD section 7.3 (D18, D41): "the one earned cron is a weekly GitHub Actions janitor that lists all
+# hcloud resources and fails loudly if anything exists while no burst is active, asserting its own
+# previous run timestamp so a disabled cron surfaces as failure (it guards an external billing
+# account against orphaned load balancers and volumes outside tofu state)."
+#
+# PUSH ACTIVATED BY DESIGN (this task's own HARD SAFETY RULE 3: never `git push` from this
+# implementation session): this file is complete, reviewed code, but runs nowhere until a maintainer
+# pushes this branch/commit to GitHub. Even once pushed, the orphan check itself stays a neutral skip
+# (not a failure) until the HCLOUD_TOKEN repo secret is added -- an absent credential is not the same
+# condition as "orphans exist," and conflating the two would train a reviewer to ignore this
+# workflow's own real failures.
+#
+# Label based orphan definition, never "any resource in the account": infra/scripts/hcloud-orphans.sh
+# (shared with `task burst:destroy`'s own post teardown check, never duplicated here) filters hcloud
+# resources by the "cluster=atlas-burst" label kube-hetzner's own module stamps on everything it
+# creates (infra/tofu/cluster/main.tf, verified against the module's locals.tf). This is precisely
+# what keeps the user's standing atlas-fastlane box (id 152778751, hand created, never carrying this
+# label) out of scope by construction: this workflow never lists, names, or reasons about any
+# resource that isn't labeled this way, so it cannot flag a box it was never told to look at.
+on:
+  schedule:
+    - cron: "0 9 * * 1" # weekly, Monday 09:00 UTC (staleness.yml already owns 08:00, kept distinct)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read # the heartbeat step reads this workflow's own past run history
+
+jobs:
+  janitor:
+    name: hcloud burst tier orphan check
+    runs-on: ubuntu-latest
+    # hcloud CLI pinned by version (D26: never a floating alias), matching this repo's own
+    # models.lock discipline extended to infrastructure tooling. Bump procedure: check
+    # https://github.com/hetznercloud/cli/releases, update HCLOUD_CLI_VERSION below, and verify again
+    # `hcloud <type> list -l cluster=atlas-burst -o noheader -o columns=id,name` still behaves the
+    # same way documented in infra/scripts/hcloud-orphans.sh before bumping.
+    env:
+      HCLOUD_CLI_VERSION: "1.66.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Heartbeat self check (a disabled or silently skipped cron must surface as failure)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The paradox this step exists to resolve: a workflow GitHub has stopped scheduling cannot
+          # detect its own absence from inside itself, because it simply never runs. What CAN be
+          # detected, the next time this workflow manages to run at all (a manual workflow_dispatch,
+          # or a push that nudges GitHub to reconsider a disabled schedule): how long it has been
+          # since the LAST successful run of this same workflow. A normal weekly cadence keeps that
+          # gap under ~9 days; a silently disabled or repeatedly failing cron shows up as a much
+          # larger gap the moment anyone looks, which is exactly "a disabled cron surfaces as
+          # failure" -- surfaced late, on the next run, never invisibly.
+          last_success_at="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/janitor.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].created_at // empty')"
+          if [[ -z "${last_success_at}" ]]; then
+            echo "no prior successful janitor run found (first ever run, or history exhausted); heartbeat passes trivially."
+          else
+            last_epoch="$(date -u -d "${last_success_at}" +%s)"
+            now_epoch="$(date -u +%s)"
+            gap_days=$(( (now_epoch - last_epoch) / 86400 ))
+            echo "last successful janitor run was ${gap_days} day(s) ago (${last_success_at})"
+            if (( gap_days > 9 )); then
+              echo "::error::janitor has not completed successfully in ${gap_days} days (expected weekly, threshold 9). The schedule may have been silently disabled (GitHub auto disables a workflow's cron after 60 days with no commits to the repo) or has been failing. Investigate this workflow's own run history before assuming the burst tier is clean." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Check HCLOUD_TOKEN is configured
+        id: gate
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: |
+          if [[ -z "${HCLOUD_TOKEN:-}" ]]; then
+            echo "HCLOUD_TOKEN repo secret is not configured yet: skipping the orphan check as a NEUTRAL run, not a failure (the burst tier does not exist yet either, so there is nothing to check). Add the secret in Settings > Secrets and variables > Actions once the burst tier's own credentials exist (infra/README.md's Burst tier section)." >> "${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install hcloud CLI
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/hcloud.tar.gz \
+            "https://github.com/hetznercloud/cli/releases/download/v${HCLOUD_CLI_VERSION}/hcloud-linux-amd64.tar.gz"
+          tar -xzf /tmp/hcloud.tar.gz -C /tmp hcloud
+          sudo install -m 0755 /tmp/hcloud /usr/local/bin/hcloud
+          hcloud version
+
+      - name: Run the shared orphan check (infra/scripts/hcloud-orphans.sh)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: infra/scripts/hcloud-orphans.sh

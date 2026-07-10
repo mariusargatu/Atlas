@@ -1,0 +1,459 @@
+name: burst-benchmark
+
+# SP10 task 5 (HLD section 7.3's "Burst benchmark" row): manual dispatch, protected environment,
+# matrix stages + load sweeps, a preflight go or no go gate, destroy in always() + the weekly janitor as
+# the sole orphan backstop. This is the last of the five named CI lanes; the four before it
+# (ci.yml/live-pr.yml/full-sweep.yml/simulator.yml) are all PR/push/manual lanes over the deterministic
+# suite or the golden dataset. This one is different in kind: it provisions real, billed Hetzner
+# infrastructure (SP5's `task burst:up`), so its own gating question is not "which judge tier" but
+# "who approves real spend, and how is it torn back down no matter what fails."
+#
+# ============================================================================================
+# (1) THE OIDC SUBSTITUTION, NAMED PLAINLY (documented ADR-030 style: state the literal words, state
+#     what is actually buildable, say why the substitution still satisfies the decision's real
+#     intent -- see ADR-030 for the identical
+#     discipline applied to a different substitution).
+# ============================================================================================
+#
+# HLD section 7.3's own table names this row's trigger as "manual, protected environment... OIDC tofu
+# apply." Hetzner Cloud has NO OIDC/STS federation mechanism at all (unlike AWS/GCP; verified against
+# infra/scripts/burst-up.sh and infra/README.md's own "Credentials" table, both of which authenticate
+# via a static, project scoped HCLOUD_TOKEN, never a federated token exchange). A literal "OIDC tofu
+# apply" step cannot be built against this provider without an intermediary this repo does not have
+# (a secrets broker federating GitHub's own OIDC token into a vault that in turn holds HCLOUD_TOKEN --
+# real added infrastructure, its own blast radius, out of scope here).
+#
+# SUBSTITUTION: `environment: burst-benchmark` below, a GitHub Actions PROTECTED ENVIRONMENT, with
+# required reviewers configured on it (once pushed -- see limitation 2). This is the SAME "a human
+# clicks approve before real spend" intent the HLD's own D register names, satisfied by a different
+# mechanism than literal token federation: the job below does not start running AT ALL until a
+# required reviewer approves it, and every credential this job reads (HCLOUD_TOKEN, the R2 keys, the
+# SSH public key, the SOPS age identity, the provider keys) is scoped to live ONLY as this
+# environment's own secrets, never a repository wide secret a lesser trusted workflow could also read.
+#
+# NOT PRESERVED, named honestly rather than blurred (matching ADR-030's own "Not preserved" section):
+# there is no cryptographic proof binding this specific workflow run's identity to the credential the
+# way OIDC's short lived, audience scoped token would; the static HCLOUD_TOKEN this job reads is a
+# long lived credential, exactly like janitor.yml's own HCLOUD_TOKEN already is. The human approval
+# gate is the control that matters here, not token federation, which is precisely research 15's own
+# words for this exact substitution: "Put this workflow behind a GitHub environment with required
+# reviewers, that is the native expensive lane needs a human click mechanism."
+#
+# ============================================================================================
+# (2) LIMITATION NAMED: the protected environment's "required reviewers" rule is a repository
+#     SETTINGS action (Settings > Environments > burst-benchmark > Required reviewers), configured by
+#     a maintainer AFTER a real push -- it is not committed code, and this file alone cannot prove it
+#     is configured. This is the SAME class of limit janitor.yml's HCLOUD_TOKEN secret and release.yml's
+#     GHCR push already carry: complete, reviewed code that activates only once a maintainer both
+#     pushes AND configures the repository setting this file merely declares (`environment:
+#     burst-benchmark` below). A later reviewer must not mistake "this workflow declares a protected
+#     environment" for "this environment is provably protected" without checking that repository
+#     setting by hand.
+# ============================================================================================
+#
+# ============================================================================================
+# (3) THE SENTINEL GO or NO GO GATE: CLAIMED BY SP10, REUSED NEVER REIMPLEMENTED.
+# ============================================================================================
+#
+# `docs/runbooks/burst-bringup.skeleton.md` step 4 named this gap explicitly and left it unowned
+# across two prior sub projects: "a sentinel probe go or no go gate... that runs a scripted smoke
+# check against the live burst endpoint before any real traffic, demo, or benchmark run is pointed at
+# it, and refuses to proceed on a red [result]." SP10 claims it here. The probe LOGIC already exists
+# and is already proven live (`testing/harness/sentinel/probe.py`, D29, deployed as a Kubernetes
+# CronJob by SP6 task 5); this workflow adds only the thin CI level wiring
+# (`testing/harness/sentinel/ci_gate.py`, `task sentinel:gate`) that calls `sentinel.probe.run_probe`
+# UNCHANGED -- never a second copy of the three known-answer/known-refusal/known-injection query
+# classes. `testing/tests/test_sentinel_ci_gate.py` is the keyless, tamper proven half of this claim:
+# it flips ONE probe class red at a time (a missing required substring; a leaked forbidden one) and
+# asserts the combined gate decision goes NO GO every time, never averaged away by the other two
+# classes passing.
+#
+# ============================================================================================
+# (4) THE xk6-sse BUILD: A CORRECTION CAUGHT DURING AUTHORING, NAMED RATHER THAN SILENTLY FIXED.
+# ============================================================================================
+#
+# The plan text names the extension's module path as `github.com/grafana/xk6-sse`. Verified against
+# the real GitHub API while authoring this file: NO SUCH REPOSITORY EXISTS. The real, actively
+# maintained extension lives at `github.com/phymbert/xk6-sse` ("A k6 extension for Server-Sent Events
+# (SSE)", a community extension, not a `grafana`-namespaced one -- `grafana/xk6-faker` is a real
+# example of the pattern the plan text's org name likely generalized from, but SSE support was never
+# moved under the `grafana` org). This file builds against the CORRECT path
+# (`github.com/phymbert/xk6-sse@v0.1.12`, the latest tagged release verified at authoring time);
+# `Taskfile.yml`'s own pre existing `load:k6` description (SP9) carried the same wrong org name and is
+# corrected in the same commit. A second, related finding also worth naming plainly rather than
+# silently acting on: `phymbert/xk6-sse`'s own README now states that, since k6's "Automatic Extension
+# Resolution" feature and the extension's own listing as a community extension, a stock k6 release
+# can resolve `k6/x/sse` without any custom `xk6 build` at all. This file still builds its own pinned
+# binary via `xk6` rather than lean on that automatic resolution, for the SAME D26 "never a floating
+# alias" reason every other pinned tool in this repo is built or installed by exact version rather
+# than trusting an ambient resolution mechanism to pick the same thing on every runner.
+#
+# Versions pinned here (verified against each project's real releases at authoring time, D26): xk6
+# v1.4.7 (`go install go.k6.io/xk6@v1.4.7`), the k6 v1.x line at v1.8.0 (`phymbert/xk6-sse`'s own
+# `go.mod` requires `go.k6.io/k6 v1.2.1`, a v1 major version module path; k6's current v2.x line uses
+# a DIFFERENT module path, `go.k6.io/k6/v2`, so building against v1.8.0 -- the latest v1.x release --
+# keeps the extension's own declared major version, rather than forcing a mismatch xk6's "k6 major
+# version auto-resolution" would otherwise have handled automatically had `--k6-version` been left
+# unset), and `phymbert/xk6-sse` v0.1.12. `actions/cache`, keyed on all three pinned versions plus
+# `runner.os`, skips the rebuild on a cache hit (there is no prebuilt binary distribution for a custom
+# extension combination like this one).
+#
+# ============================================================================================
+# (5) PROVING task burst:destroy STILL FIRES UNDER FAILURE (the always() reasoning trace).
+# ============================================================================================
+#
+# `task burst:destroy` below is the JOB'S FINAL STEP, with `if: always()`. GitHub Actions' own
+# documented step condition semantics: a step's default condition is equivalent to `success()` (skip
+# once any earlier step in the same job has failed), but `if: always()` evaluates true regardless of
+# the job's current status, INCLUDING after an earlier step failed, after a manual cancellation, and
+# after a `timeout-minutes` cutoff (both of the latter are handled by GitHub as a cancellation
+# signal to the run, not a silent kill: steps whose own condition still evaluates true, `always()`
+# chief among them, still execute). This is not a novel claim invented for this file: EVERY upload
+# step across ci.yml/live-pr.yml/full-sweep.yml/simulator.yml/release.yml already relies on the exact
+# same `if: always()` semantics to capture a report after a failed run; this job simply relies on the
+# identical mechanism for a teardown instead of a report upload.
+#
+# `timeout-minutes: 180` at the job level exists SPECIFICALLY so a hung live step (a stuck matrix
+# cell, a wedged load run -- SP9's own live capture session recorded exactly this failure mode
+# against a real TEI node, see .superpowers/sdd/progress.md) cannot leave the burst tier provisioned
+# indefinitely with no destroy attempt ever triggered: the timeout itself becomes the "earlier step
+# failure" the fire drill below simulates, one more path into the SAME always() step, not a
+# separate mechanism. `concurrency.cancel-in-progress: false` (below) is the complementary choice: a
+# second manual dispatch while one run is still mid benchmark must NOT cancel the first one -- queuing
+# instead lets the run that already owns the provisioned tier finish its own destroy sequence
+# uninterrupted, rather than exercising the cancellation grace period path any more often than the
+# timeout itself already requires.
+#
+# THE HERMETIC FIRE DRILL (matching SP9's own spend gate tamper rigor: prove the mechanism bites, do
+# not just trust the YAML's own `if:` string): `testing/tests/test_burst_benchmark_workflow.py`
+# implements a small, pure simulator of GitHub Actions' own step condition semantics (default =
+# skip after any failure, `always()` = always run) and feeds it THIS file's own parsed step list with
+# an EARLIER step (parametrized: `task burst:up` itself, the sentinel gate, and the matrix step) marked
+# as the one that failed, then asserts the destroy step still executes under every one of those
+# failure points -- never a test that only reads `if: always()` off the page and trusts it.
+#
+# ============================================================================================
+# (6) PRE EXISTING GAPS THIS WORKFLOW DOES NOT FIX, NAMED PLAINLY (matching release.yml's own
+#     "helmfile.lock is currently a no op" honesty precedent -- complete, correct, reviewed code,
+#     gated on a real precondition SP10 does not own).
+# ============================================================================================
+#
+# `task burst:up` refuses TODAY, before any tofu/hcloud/helmfile command, at its own pre existing
+# "indexes restore stop" (`infra/scripts/burst-up.sh`, SP5 task 5's own documented gap: burst's
+# retrieval index has no restore from R2 path onto a node or PVC yet, named in infra/README.md's "What
+# Task 5 deliberately does not do" and `docs/runbooks/corpus-bump.skeleton.md`). A SECOND, downstream
+# gap the same README section names: burst's own Postgres credentials Secret
+# (`atlas-postgres-credentials`) never renders today (`infra/environments/burst/values.yaml` never
+# sets `.Values.postgres`), so `atlas-backend` cannot actually start even past the first gap. A THIRD
+# gap, named by `Taskfile.yml`'s own `load:join` description (SP9 task 6): turning a real, live
+# Phoenix span export into `phoenix_join.SpanRecord`'s own JSON shape is documented, not yet built,
+# live wiring -- the load:join step below checks for that file and reports a NEUTRAL note (never a
+# hard failure of the whole job) when it is absent, the SAME "an absent precondition is not the same
+# condition as a real failure" reasoning janitor.yml's own HCLOUD_TOKEN gate already established.
+#
+# None of these three gaps are SP10's to close (they are SP5/SP9 owned infrastructure, not a CI lane
+# wiring question); this workflow's own code is complete and correctly wired for the day all three
+# close, exactly like release.yml's helmfile.lock step already models. Naming them here is what keeps
+# a future reviewer from discovering, mid an actual first real run, that this workflow was declared
+# runnable without ever having been checked against what `task burst:up` itself already refuses to do.
+#
+# ============================================================================================
+# LOCAL ONLY, DORMANT UNTIL PUSHED (the same posture ci.yml/janitor.yml/release.yml/live-pr.yml/
+# full-sweep.yml/simulator.yml already carry): this file is complete, actionlint clean, reviewed code,
+# but runs nowhere until a maintainer pushes this branch/commit to GitHub, configures the
+# `burst-benchmark` environment's required reviewers (limitation 2 above), and adds every secret this
+# file reads (listed at each step below) to that environment. "Verified" here means exactly what it
+# means for every other SP10 workflow: actionlint clean, every referenced Taskfile target/script
+# exists and runs locally, every secret name matches what the script it feeds actually reads, never
+# "observed running on GitHub."
+#
+# `.github/workflows/janitor.yml` (the weekly hcloud orphan check) is the SOLE backstop for anything
+# `task burst:destroy` itself fails to clean up -- this workflow adds no second orphan check of its
+# own, per the plan's own instruction.
+on:
+  workflow_dispatch:
+    inputs:
+      matrix_args:
+        description: >-
+          Optional extra flags passed to `task matrix:live -- <these flags>` (e.g. "--limit-cases 5
+          --generators ollama --variant-generator none" for a cheap smoke run). Left empty, the
+          driver runs its own full default sweep, still bounded by matrix.spend_gate's own per
+          provider ceilings ($20 OpenAI / $10 Anthropic / $0 Ollama).
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  # NEVER cancel a run already mid burst-spend (see reasoning trace above): a second manual dispatch
+  # queues behind the first rather than racing its own destroy sequence against a cancellation.
+  cancel-in-progress: false
+
+env:
+  TZ: UTC
+  LC_ALL: C
+  PYTHONHASHSEED: "0"
+  PYTHONPATH: backend:testing/harness:.
+  HCLOUD_CLI_VERSION: "1.66.0" # matches janitor.yml's own pinned version, verified against the same release
+  TOFU_VERSION: "1.11.5" # matches infra/README.md's own documented verified version
+  HELM_VERSION: "4.2.3" # matches release.yml's own pinned version
+  HELMFILE_VERSION: "1.7.1" # matches release.yml's own pinned version
+  KUBECTL_VERSION: "1.36.2" # current stable at authoring time; also ubuntu-latest's own preinstalled version, pinned explicitly per D26 rather than relying on the ambient runner image
+  XK6_VERSION: "v1.4.7" # go.k6.io/xk6, latest tagged release verified at authoring time
+  XK6_SSE_VERSION: "v0.1.12" # github.com/phymbert/xk6-sse (CORRECTED org, see header), latest tagged release verified at authoring time
+  XK6_BUILD_K6_VERSION: "v1.8.0" # the latest k6 v1.x release: matches xk6-sse's own go.mod major version (go.k6.io/k6, not the v2.x line's go.k6.io/k6/v2)
+
+jobs:
+  burst-benchmark:
+    name: "burst up -> sentinel gate -> xk6 build -> matrix -> load -> destroy (always)"
+    runs-on: ubuntu-latest
+    environment: burst-benchmark
+    # See reasoning trace (5) above: bounds how long a hung live step can hold the burst tier up
+    # before the destroy step still fires via the SAME always() mechanism a manual cancel would use.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Install OpenTofu (pinned, D26)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/tofu.tar.gz "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/tofu.tar.gz -C /tmp tofu
+          sudo install -m 0755 /tmp/tofu /usr/local/bin/tofu
+          tofu version
+
+      - name: Install hcloud CLI (pinned, matches janitor.yml's own HCLOUD_CLI_VERSION)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/hcloud.tar.gz "https://github.com/hetznercloud/cli/releases/download/v${HCLOUD_CLI_VERSION}/hcloud-linux-amd64.tar.gz"
+          tar -xzf /tmp/hcloud.tar.gz -C /tmp hcloud
+          sudo install -m 0755 /tmp/hcloud /usr/local/bin/hcloud
+          hcloud version
+
+      - name: Install AWS CLI v2 (R2's S3 compatible API; burst-up.sh/burst-destroy.sh's own aws s3/s3api calls)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install
+          aws --version
+
+      - name: Install helm + helmfile (SAME pinned versions release.yml already uses)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          curl -fsSL -o /tmp/helmfile.tar.gz "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
+          sudo install -m 0755 /tmp/helmfile /usr/local/bin/helmfile
+
+      - name: Install kubectl (pinned, matches the ubuntu-latest runner's own preinstalled version)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/kubectl "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Write the operator SSH public key (infra/tofu/cluster's own required ssh_public_key variable)
+        env:
+          ATLAS_HETZNER_SSH_PUBKEY: ${{ secrets.ATLAS_HETZNER_SSH_PUBKEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.config/atlas-hetzner
+          printf '%s\n' "${ATLAS_HETZNER_SSH_PUBKEY}" > ~/.config/atlas-hetzner/id_ed25519.pub
+          chmod 600 ~/.config/atlas-hetzner/id_ed25519.pub
+
+      - name: Write the SOPS age identity (decrypts environments/burst/secrets.enc.yaml's cloudflareApiToken for `helmfile -e burst sync`)
+        env:
+          ATLAS_AGE_KEY: ${{ secrets.ATLAS_AGE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.config/atlas-age
+          printf '%s\n' "${ATLAS_AGE_KEY}" > ~/.config/atlas-age/keys.txt
+          chmod 600 ~/.config/atlas-age/keys.txt
+
+      # ---- (2) task burst:up -- SP5's credential gated tofu apply + helmfile sync -----------------
+      # See header (6): this refuses TODAY at its own pre existing indexes restore stop, before any
+      # tofu/hcloud/helmfile command -- a real, disclosed, out of scope precondition, not built around
+      # silently here.
+      - name: task burst:up (SP5's credential gated tofu apply + helmfile sync)
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ATLAS_R2_ENDPOINT: ${{ secrets.ATLAS_R2_ENDPOINT }}
+          ATLAS_BURST_DOMAIN: ${{ secrets.ATLAS_BURST_DOMAIN }}
+          ATLAS_BURST_ACME_EMAIL: ${{ secrets.ATLAS_BURST_ACME_EMAIL }}
+        run: |
+          set -euo pipefail
+          export SOPS_AGE_KEY_FILE="${HOME}/.config/atlas-age/keys.txt"
+          task burst:up
+
+      # ---- (3) the sentinel go or no go gate: SP10 claims it, reuses probe.py unchanged -------------
+      - name: "Sentinel go or no go gate: port-forward to the freshly provisioned backend, HARD FAIL before any paid step"
+        env:
+          KUBECONFIG: ${{ github.workspace }}/infra/.kube/burst-config
+        run: |
+          set -euo pipefail
+          PF_LOG="$(mktemp)"
+          kubectl -n atlas port-forward svc/backend 18000:8000 >"${PF_LOG}" 2>&1 &
+          PF_PID=$!
+          cleanup() { kill "${PF_PID}" >/dev/null 2>&1 || true; wait "${PF_PID}" 2>/dev/null || true; rm -f "${PF_LOG}"; }
+          trap cleanup EXIT
+
+          READY=0
+          for _ in $(seq 1 30); do
+            if grep -q "Forwarding from" "${PF_LOG}" 2>/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "${READY}" -ne 1 ]]; then
+            echo "kubectl port-forward to svc/backend never became ready within 30s; its own output:" >&2
+            cat "${PF_LOG}" >&2
+            exit 1
+          fi
+
+          ATLAS_PROBE_BASE_URL="http://localhost:18000" task sentinel:gate
+
+      # ---- (4) build the xk6-sse binary: go install xk6, then xk6 build ---------------------------
+      - name: Install Go (pinned minor, matches xk6/k6's own go.mod toolchain requirement)
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.25"
+
+      - name: Cache the built xk6-sse k6 binary (no prebuilt distribution exists for this custom extension combination)
+        id: cache-xk6-sse
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/.xk6-sse
+          key: xk6-sse-${{ runner.os }}-xk6${{ env.XK6_VERSION }}-sse${{ env.XK6_SSE_VERSION }}-k6${{ env.XK6_BUILD_K6_VERSION }}
+
+      - name: Build the xk6-sse k6 binary (go install xk6, then xk6 build --with the CORRECTED phymbert/xk6-sse module path)
+        if: steps.cache-xk6-sse.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          go install "go.k6.io/xk6@${XK6_VERSION}"
+          mkdir -p "${GITHUB_WORKSPACE}/.xk6-sse"
+          "$(go env GOPATH)/bin/xk6" build "${XK6_BUILD_K6_VERSION}" \
+            --with "github.com/phymbert/xk6-sse@${XK6_SSE_VERSION}" \
+            -o "${GITHUB_WORKSPACE}/.xk6-sse/k6"
+
+      - name: Put the built k6 binary on PATH (task load:k6's own documented precondition)
+        run: echo "${GITHUB_WORKSPACE}/.xk6-sse" >> "${GITHUB_PATH}"
+
+      - name: Verify the built k6 binary actually carries the k6/x/sse module
+        run: |
+          set -euo pipefail
+          k6 version
+          k6 version | grep -qi sse || { echo "k6 version does not list the xk6-sse extension; the build did not link it in" >&2; exit 1; }
+
+      # ---- (5) task matrix:live -- SP9's driver, spend gated by its own SpendGate --------------------
+      # See header (6): needs the Postgres/tei-embed/tei-rerank Services the sentinel gate's own
+      # backend port-forward did not touch; a real run additionally needs burst's own
+      # atlas-postgres-credentials Secret to exist (a disclosed, pre existing gap, not built around).
+      - name: "Port-forward Postgres + TEI (real retrieval against the burst tier's own data)"
+        env:
+          KUBECONFIG: ${{ github.workspace }}/infra/.kube/burst-config
+        run: |
+          set -euo pipefail
+          kubectl -n atlas port-forward svc/atlas-pg-rw 15432:5432 >/tmp/pf-pg.log 2>&1 &
+          echo $! > /tmp/pf-pg.pid
+          kubectl -n atlas port-forward svc/tei-embed 18080:80 >/tmp/pf-tei-embed.log 2>&1 &
+          echo $! > /tmp/pf-tei-embed.pid
+          kubectl -n atlas port-forward svc/tei-rerank 18081:80 >/tmp/pf-tei-rerank.log 2>&1 &
+          echo $! > /tmp/pf-tei-rerank.pid
+          for log in /tmp/pf-pg.log /tmp/pf-tei-embed.log /tmp/pf-tei-rerank.log; do
+            for _ in $(seq 1 30); do
+              grep -q "Forwarding from" "${log}" 2>/dev/null && break
+              sleep 1
+            done
+            grep -q "Forwarding from" "${log}" 2>/dev/null || { echo "port-forward never became ready: ${log}" >&2; cat "${log}" >&2; exit 1; }
+          done
+
+      - name: task matrix:live (SP9's staged matrix driver; spend gated, provider keys are the caller's own)
+        env:
+          KUBECONFIG: ${{ github.workspace }}/infra/.kube/burst-config
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MATRIX_ARGS: ${{ inputs.matrix_args }}
+        run: |
+          set -euo pipefail
+          ATLAS_PG_DSN="postgresql://atlas:$(kubectl -n atlas get secret atlas-postgres-credentials -o jsonpath='{.data.password}' | base64 -d)@localhost:15432/atlas"
+          export ATLAS_PG_DSN
+          export ATLAS_TEI_EMBED_URL="http://localhost:18080"
+          export ATLAS_TEI_RERANK_URL="http://localhost:18081"
+          # shellcheck disable=SC2086 # deliberately unquoted: MATRIX_ARGS is a space separated list
+          # of CLI flags (e.g. "--limit-cases 5 --generators ollama"), meant to word split into
+          # several arguments -- quoting it would pass the whole thing as one literal argument.
+          task matrix:live -- ${MATRIX_ARGS}
+
+      - name: Stop the Postgres/TEI port-forwards
+        if: always()
+        run: |
+          for f in /tmp/pf-pg.pid /tmp/pf-tei-embed.pid /tmp/pf-tei-rerank.pid; do
+            if [[ -f "${f}" ]]; then
+              kill "$(cat "${f}")" >/dev/null 2>&1 || true
+            fi
+          done
+
+      # ---- (6) the load lane: task load:k6 then task load:join -------------------------------------
+      - name: task load:k6 (stepped concurrency 1-32 VUs against the burst tier's own real ingress, D3/7.1)
+        env:
+          ATLAS_BASE_URL: https://${{ secrets.ATLAS_BURST_DOMAIN }}
+        run: |
+          set -euo pipefail
+          task load:k6 | tee /tmp/load-k6-iterations.log
+
+      # task load:join's own Taskfile description names this precondition plainly: turning a real
+      # live Phoenix span export into phoenix_join.SpanRecord's own JSON shape is documented, not yet
+      # built, live wiring (SP9 task 6). A NEUTRAL note, never a hard failure of the whole job, when
+      # that export does not exist -- the same "an absent precondition is not a failure" reasoning
+      # janitor.yml's own HCLOUD_TOKEN gate already established.
+      - name: task load:join (the Phoenix join; NEUTRAL skip if the live span export does not exist yet)
+        run: |
+          set -euo pipefail
+          if [[ -f "var/load/phoenix-spans.json" ]]; then
+            task load:join ITERATIONS=/tmp/load-k6-iterations.log SPANS=var/load/phoenix-spans.json
+          else
+            echo "var/load/phoenix-spans.json not present: the live Phoenix span export is documented, not yet built, wiring (Taskfile.yml's own load:join description, SP9 task 6). Skipping the join as a NEUTRAL step, not a failure -- task load:k6's own Trend metrics/thresholds above already ran." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      # ---- (7) upload manifests/reports as artifacts ------------------------------------------------
+      - name: Upload burst benchmark artifacts (matrix manifests, load lane results; never a required check)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: burst-benchmark-report-${{ github.run_id }}
+          path: |
+            var/matrix/
+            /tmp/load-k6-iterations.log
+          if-no-files-found: warn
+
+      # ---- (8) task burst:destroy in always(): the LAST step, unconditionally --------------------
+      # See reasoning trace (5) above and testing/tests/test_burst_benchmark_workflow.py's own fire
+      # drill: whatever failed earlier in this job (burst:up itself, the sentinel gate, the xk6 build,
+      # the matrix, the load lane, or the job's own 180 minute timeout), this still runs.
+      - name: task burst:destroy (always -- burst-destroy.sh's own every step regardless discipline)
+        if: always()
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ATLAS_R2_ENDPOINT: ${{ secrets.ATLAS_R2_ENDPOINT }}
+        run: task burst:destroy
+
+      # (9) .github/workflows/janitor.yml (weekly) is the SOLE backstop for anything the step above
+      # itself fails to clean up -- deliberately no second orphan check added here.

@@ -1,0 +1,36 @@
+name: staleness
+
+# Notification, not a gate: this checks wall-clock freshness of a committed artifact and never
+# runs in, or blocks, the hermetic PR lane (which must never depend on wall clock). GitHub
+# auto-disables scheduled workflows on public repos after 60 days with no commits to the repo;
+# only a commit resets that clock, so workflow_dispatch is the manual backstop if the cron goes
+# quiet.
+on:
+  schedule:
+    - cron: "0 8 * * 1" # weekly, Monday 08:00 UTC
+  workflow_dispatch:
+
+# Intentional, recorded choice: this reads red from merge day until the first `task judge-live`
+# artifact is committed under testing/harness/judge/artifacts/live_provisional/ (an absent
+# calibration IS honestly stale, this is not a bug to silence); see
+# docs/measurements/sp8-judge-human-loop.md Section 8. Scheduled plus workflow_dispatch only, never
+# triggered by a push, so this never fires on a local run either way.
+
+permissions:
+  contents: read
+
+jobs:
+  check-judge-calibration-freshness:
+    name: judge live provisional calibration artifact freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check newest dated calibration artifact is under 45 days old
+        # The date-parsing and threshold logic lives in a TESTED pure module (evals.staleness,
+        # testing/tests/test_staleness.py), which takes `today` as data. The wall clock enters ONLY
+        # here, via $(date -u +%F). Pure stdlib: no keys, nothing to sync (the module is under
+        # `evals` directly, not under the judge package, so importing it pulls in no dependencies).
+        run: |
+          PYTHONPATH=testing/harness python3 -m evals.staleness \
+            testing/harness/judge/artifacts/live_provisional "$(date -u +%F)" 45

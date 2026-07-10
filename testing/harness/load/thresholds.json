@@ -1,0 +1,6 @@
+{
+  "ttft_ms": {"stat": "p(95)", "op": "<", "value": 2000},
+  "tokens_per_sec": {"stat": "p(50)", "op": ">", "value": 5},
+  "e2e_ms": {"stat": "p(95)", "op": "<", "value": 8000},
+  "goodput": {"stat": "rate", "op": ">", "value": 0.95}
+}

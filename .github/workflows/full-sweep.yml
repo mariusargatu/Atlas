@@ -1,0 +1,112 @@
+name: full-sweep
+
+# SP10 task 3 (HLD section 7.3's "Full sweep" row): the full current golden set (SP7's 76 case
+# seed set, testing/harness/dataset_tools/seed_cases.jsonl) graded with the CALIBRATED FRONTIER
+# JUDGE tier (D15: the top model per provider family, not the Live PR lane's cheap tier), publishing
+# a rendered report plus a per run trend.jsonl row (reusing evalkit's own EvalReport/
+# append_trend_row shape, testing/harness/judge/full_sweep.py) as an UPLOADED WORKFLOW ARTIFACT, not
+# a file committed to the repo: this workflow's permissions are contents: read and every run starts
+# from a fresh checkout, so trend rows do not accumulate across runs unless a maintainer manually
+# commits them back, a step this lane does not perform. NEVER GATES (D18): this workflow has no
+# required check tied to any rate in the report; the upload step below runs `if: always()` for
+# exactly that reason.
+#
+# PUSH TO MAIN ONLY, NOT ALSO A WEEKLY CRON (D18 holds; research 15's weekly backstop against
+# provider drift is DECLINED here with this named reason): D18's own binding text cuts every
+# standing cadence except the weekly hcloud janitor ("standing cadences are otherwise cut... the
+# one earned cron is the weekly janitor"). Research 15 recommends a weekly scheduled run in addition
+# to merge to main triggering, as a backstop against silent provider drift; this plan holds D18's
+# stricter line instead of silently adopting that recommendation, exactly the choice
+# the SP10 plan's own task 3 makes explicit. A provider drift
+# backstop this narrow dataset cannot yet license anyway (see the honesty note below) is a real,
+# named gap, not a silent omission.
+#
+# 76 CASE HONESTY (D16, matching SP7/SP9/SP10 task 2's own disclosures): `testing/harness/
+# dataset_tools/seed_cases.jsonl` has 76 cases today, not yet D16's 50-80 PR smoke / 300-500 full
+# sweep target. This lane and SP10's Live PR lane (live-pr.yml) draw on the SAME small set today, at
+# different judge tiers, not genuinely different sized slices -- see
+# docs/measurements/sp7-datasets-metrics.md.
+#
+# LOCAL ONLY, DORMANT UNTIL PUSHED (the same posture janitor.yml/release.yml/live-pr.yml already
+# carry): this file is complete, actionlint clean, reviewed code, but runs nowhere until a
+# maintainer pushes this branch/commit to GitHub AND configures at least one of the
+# OPENAI_API_KEY / ANTHROPIC_API_KEY repo secrets this job reads. "Verified" here means exactly what
+# it means for every other SP10 workflow: actionlint clean, every referenced Taskfile target/script
+# exists and runs locally, never "observed running on GitHub"
+# (testing/tests/test_full_sweep_workflow.py is the hermetic half of that claim). Absent a
+# configured secret, the job below reports a NEUTRAL skip (the same "the credential doesn't exist
+# yet either" reasoning janitor.yml's own HCLOUD_TOKEN gate already documents), not a hard failure.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-sweep:
+    name: "full current golden set + calibrated frontier judge (report + trend, never gates)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check a judge provider key is configured
+        id: gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [[ -z "${OPENAI_API_KEY:-}" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            echo "neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is configured yet: skipping the full sweep as a NEUTRAL run, not a failure (this lane is additive once a maintainer adds one of those repo secrets, Settings > Secrets and variables > Actions)." >> "${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install uv (and Python 3.12)
+        if: steps.gate.outputs.configured == 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        if: steps.gate.outputs.configured == 'true'
+        uses: arduino/setup-task@v2
+
+      # Real retrieval against the CURRENT corpus (never the toy in memory fixture): the committed
+      # index (loaded by compose's own one shot rag-init service) is built from whatever corpus/
+      # looked like at commit time, so re ingesting from THIS push's own checkout, exactly like
+      # live-pr.yml already does, is what keeps a merged corpus/** change from grading against a
+      # stale index.
+      - name: Bring up Postgres + TEI (real retrieval, no provider key needed)
+        if: steps.gate.outputs.configured == 'true'
+        run: docker compose up -d --wait postgres tei-embed tei-rerank rag-init
+
+      - name: Re ingest the corpus at this commit
+        if: steps.gate.outputs.configured == 'true'
+        run: task rag:ingest
+
+      - name: Run the Full sweep lane driver (calibrated frontier judge; report + trend only, never gates)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          MODEL_PROVIDER: anthropic
+          MODEL_ID: claude-sonnet-5
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: task full-sweep:run
+
+      - name: Upload the full sweep report + trend file (never a required check)
+        if: always() && steps.gate.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-sweep-report
+          path: testing/harness/judge/artifacts/full_sweep/
+          if-no-files-found: warn # the driver may fail closed before writing an artifact; not fatal to the upload step itself

@@ -1,0 +1,130 @@
+name: live-pr
+
+# SP10 task 2 (HLD section 7.3's "Live PR" row): paths filtered, a cheap judge tier over the
+# CURRENT 76 case seed set, gates ONLY on deterministic floors, never the judge's own verdict (D18:
+# "tiered live lanes never gate on judges"). Judged deltas + confidence intervals are reported (the
+# uploaded artifact below), never blocking.
+#
+# 76 CASE HONESTY (D16, matching SP7/SP9's own disclosures): `testing/harness/dataset_tools/
+# seed_cases.jsonl` has 76 cases today, not yet D16's 50-80 PR smoke / 300-500 full sweep target.
+# This lane and SP10's Full sweep lane (`full-sweep.yml`) draw on the SAME small set today, at
+# different judge tiers, not genuinely different sized slices -- see
+# docs/measurements/sp7-datasets-metrics.md.
+#
+# LOCAL ONLY, DORMANT UNTIL PUSHED (the same posture janitor.yml/release.yml already carry): this
+# file is complete, actionlint clean, reviewed code, but runs nowhere until a maintainer pushes this
+# branch/commit to GitHub AND configures at least one of the OPENAI_API_KEY / ANTHROPIC_API_KEY repo
+# secrets this job reads. "Verified" here means exactly what it means for every other SP10 workflow:
+# actionlint clean, every referenced Taskfile target/script exists and runs locally, never "observed
+# running on GitHub" (testing/tests/test_live_pr_workflow.py is the hermetic half of that claim).
+# Absent a configured secret, the live-sweep job below reports a NEUTRAL skip (the same "the
+# credential doesn't exist yet either" reasoning janitor.yml's own HCLOUD_TOKEN gate already
+# documents), not a hard failure -- this lane is additive once its secrets exist, not a trap that
+# bricks every merge the moment the paths filter first matches.
+on:
+  pull_request:
+    paths:
+      - "backend/atlas/**"
+      - "corpus/**"
+      - "contracts/**"
+      - "testing/harness/quality/**"
+      - "testing/harness/judge/**"
+      - "testing/harness/dataset_tools/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Deterministic floor 1 of 3: contract diff (git aware). Kept as its own job, mirroring
+  # release.yml's own changelog-gate separation of concerns, rather than folded into the Python
+  # driver below -- this check is git history aware (diffs the PR head against origin/main); the
+  # other two floors are not, and live entirely inside `judge/live_pr_lane.py`. GATES the merge.
+  contract-diff:
+    name: "deterministic floor 1/3: contract diff (git aware)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history: this diffs the PR head against origin/main
+
+      - name: Install uv (and Python 3.12)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: contracts diff against origin/main
+        run: task contracts:diff REF=origin/main
+
+  # Deterministic floors 2/3 (guard interception, SP7 registry anchored answer correctness) plus the
+  # cheap judge tier (report only, never gates). Needs a real Postgres/TEI retrieval stack (the
+  # paths filter includes corpus/**, so this floor is exactly the one meant to catch a corpus/registry
+  # regression a stale committed index would hide) and at least one live provider key for the judge
+  # tier and the agent's own generation.
+  live-sweep:
+    name: deterministic floors 2-3 + cheap judge tier (over the 76 case seed set)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check a judge provider key is configured
+        id: gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [[ -z "${OPENAI_API_KEY:-}" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            echo "neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is configured yet: skipping the live sweep as a NEUTRAL run, not a failure (this lane is additive once a maintainer adds one of those repo secrets, Settings > Secrets and variables > Actions)." >> "${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install uv (and Python 3.12)
+        if: steps.gate.outputs.configured == 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Task
+        if: steps.gate.outputs.configured == 'true'
+        uses: arduino/setup-task@v2
+
+      # Real retrieval against the CURRENT corpus (never the toy in memory fixture): the committed
+      # index (loaded by compose's own one shot rag-init service) is built from whatever corpus/
+      # looked like at commit time, so `task rag:ingest` re embeds and re loads it from the PR's own
+      # checkout before the driver runs -- the one step that actually makes this lane meaningful for
+      # a corpus/registry change, not merely a backend/atlas one.
+      - name: Bring up Postgres + TEI (real retrieval, no provider key needed)
+        if: steps.gate.outputs.configured == 'true'
+        run: docker compose up -d --wait postgres tei-embed tei-rerank rag-init
+
+      - name: Re ingest the corpus at this PR's own commit
+        if: steps.gate.outputs.configured == 'true'
+        run: task rag:ingest
+
+      - name: Run the Live PR lane driver (guard interception + SP7 answer correctness gate; cheap judge tier reported only)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          TZ: UTC
+          LC_ALL: C
+          PYTHONHASHSEED: "0"
+          MODEL_PROVIDER: anthropic
+          MODEL_ID: claude-sonnet-5
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: task live-pr:sweep
+
+      - name: Upload the live PR lane report (judged deltas + CIs, never a required check)
+        if: always() && steps.gate.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pr-lane-report
+          path: testing/harness/judge/artifacts/live_pr_lane/
+          if-no-files-found: warn # the driver may fail closed before writing an artifact; not fatal to the upload step itself
