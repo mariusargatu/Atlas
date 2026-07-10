@@ -1,0 +1,47 @@
+{
+  "n": 100,
+  "seed": 12495876,
+  "resamples": 10000,
+  "v_a": {
+    "passes": 84,
+    "rate": 0.84,
+    "ci95": [
+      0.7557955544110557,
+      0.8990479765052628
+    ]
+  },
+  "v_b": {
+    "passes": 81,
+    "rate": 0.81,
+    "ci95": [
+      0.7222097592919214,
+      0.8748534600729574
+    ]
+  },
+  "marginal_intervals_overlap": true,
+  "paired": {
+    "diff": 0.029999999999999916,
+    "diff_ci95": [
+      -0.030000000000000027,
+      0.09999999999999998
+    ],
+    "diff_ci_excludes_zero": false,
+    "permutation_p": 0.553044695530447,
+    "mcnemar_p": 0.548828125,
+    "discordant": {
+      "a_pass_b_fail": 7,
+      "a_fail_b_pass": 4
+    }
+  },
+  "release_gate": {
+    "candidate": "v_b",
+    "threshold": 0.8,
+    "variance_budget": 0.2,
+    "lower_bound": 0.7222097592919214,
+    "width": 0.152643701,
+    "verdict": "fail",
+    "reason": "lower bound 0.722 is below the 0.800 bar: the floor has not cleared, so the gate fails closed"
+  },
+  "significant": false,
+  "verdict": "no regression: the gap sits inside the noise, you cannot ship \"v_a is better\""
+}

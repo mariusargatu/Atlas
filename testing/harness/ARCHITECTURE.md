@@ -56,7 +56,7 @@ flowchart LR
         EK["evalkit<br/>plan → generate → grade"]
         DR["drift<br/>decision diff"]
         IO["inference_oracle<br/>differential truth"]
-        ST["stats<br/>Wilson CI · Cohen κ"]
+        ST["stats · gate<br/>CIs · paired tests · lower-bound gate"]
     end
 
     DET --> GRAPH
@@ -88,7 +88,8 @@ testing/harness/
     providers.py     builds the live provider (Ollama / Anthropic / OpenAI); REPLAY needs none
   tracing/         the span tree each turn emits, the graders' substrate
   evals/           the OTHER machine: grade the agent
-    stats.py         honest numbers: Wilson intervals, judge↔human Cohen κ
+    stats.py         honest numbers: intervals (Wilson/Wald/bootstrap/BCa/cluster), paired tests, power, Cohen κ
+    gate.py          release gating on the interval's lower bound (variance budget + quarantine)
     scaffold.py      build_replay_graph(), one definition of the REPLAY wiring
     evalkit/         the scored lane: case · planner · runner · graders · report
     drift/           diff DECISIONS old-vs-new behind a stable request key
@@ -222,9 +223,11 @@ flowchart LR
   fail. `GradeContext` is what every grader reads: `final_response` plus the `trace` (read-only).
 - **`run_suite`** resolves each case's declared graders against a `{name: Grader}` registry (a
   mixed-risk suite grades each case with only the rules it names), or applies a flat list uniformly.
-- **A rate, never a verdict**: a case that passes 7/10 is a known coin-flip; the same case run once
-  and passing is a landmine labelled safe. Turning the rate into a confidence interval (and gating on
-  its lower bound) is `stats.wilson_interval`'s job.
+- **A rate, never a verdict — and never bare**: a case that passes 7/10 is a known coin-flip; the
+  same case run once and passing is a landmine labelled safe. Every rate the report serializes
+  carries its Wilson 95% interval (a reporter-lint meta-test walks the trend row and fails any
+  bare point estimate), and `EvalReport.gate()` gates the tracked rate on the interval's floor,
+  never the point.
 
 ### 4.2 The drift lane (`drift`): the fourth gateway reading
 
@@ -277,14 +280,21 @@ rules engine vs the model's claim) and flag disagreement, catching a plausible-b
 answer **without** a pre-stored label. A `None` derivation (question not applicable) is its own N/A
 verdict, never a false DISAGREE.
 
-### 4.4 Honest numbers (`stats`)
+### 4.4 Honest numbers (`stats`, `gate`)
 
 A rate is only as honest as its interval. [`stats`](evals/stats.py) turns a pass count into a
-**Wilson confidence interval**, so a lane gates on the interval's *lower bound*, not the point
-estimate a small sample inflates, and scores judge↔human agreement with **Cohen's κ** (raw agreement
-flatters; κ discounts chance). The lanes report the rate; `stats` is what makes "is it getting better
-or worse?" answerable rather than anecdotal. It is shared machinery, not a lane of its own, so it has
-no `__main__`.
+**Wilson confidence interval**, scores judge↔human agreement with **Cohen's κ** (raw agreement
+flatters; κ discounts chance), and carries the rest of the statistics-article toolbox: seeded
+percentile and **BCa** bootstraps for metrics with no clean SE, a **cluster bootstrap** that
+resamples whole conversations (turns are correlated), the **paired** tests that belong on
+same-items comparisons (paired bootstrap, permutation, exact McNemar), **power sizing**
+(`required_n` / `detectable_effect`, so an underpowered suite's silence is named blindness, not
+a pass), and the within-/between-item **variance decomposition** for multi-trial runs.
+[`gate`](evals/gate.py) is where the numbers meet a release: gate on the interval's **lower
+bound**, never the point, with a **variance budget** (too wide is an unproven claim) and a
+**quarantine** verdict (rerun, don't ship a coin flip). The lanes report the rate; `stats` is
+what makes "is it getting better or worse?" answerable rather than anecdotal. Both are shared
+machinery, not lanes of their own, so they have no `__main__`.
 
 [↑ Contents](#contents)
 
