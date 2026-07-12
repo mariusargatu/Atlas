@@ -124,14 +124,20 @@ def _study() -> str:
         "",
         "## The headline",
         "",
-        f"- before: Cohen's κ = **{naive.kappa:.2f}** → {'LICENSED' if naive.licensed else 'NOT licensed'} "
-        f"(bar {naive.bar:.2f})",
-        f"- after:  Cohen's κ = **{corrected.kappa:.2f}** → {'LICENSED' if corrected.licensed else 'NOT licensed'} "
-        f"(bar {corrected.bar:.2f})",
+        f"- before: Cohen's κ = **{naive.kappa:.2f}** (95% CI [{naive.kappa_ci[1]:.2f}, {naive.kappa_ci[2]:.2f}]) "
+        f"→ {'LICENSED' if naive.licensed else 'NOT licensed'} (bar {naive.bar:.2f})",
+        f"- after:  Cohen's κ = **{corrected.kappa:.2f}** (95% CI [{corrected.kappa_ci[1]:.2f}, {corrected.kappa_ci[2]:.2f}]) "
+        f"→ {'LICENSED' if corrected.licensed else 'NOT licensed'} (bar {corrected.bar:.2f})",
         "",
-        "The naive judge's raw agreement already looked respectable at 64%; chance-corrected "
-        "agreement is what exposed it (κ 0.29, barely above chance). After the fix both rise, but "
-        "kappa is the honest measure, the one a judge cannot fool by passing everything.",
+        f"The naive judge's raw agreement already looked respectable at {naive.raw_agreement:.0%}; "
+        f"chance-corrected agreement is what exposed it (κ {naive.kappa:.2f}, barely above chance). "
+        "Kappa is the honest measure, the one a judge cannot fool by passing everything.",
+        "",
+        "But even the corrected judge is licensed on the FLOOR of its interval, not its point. At "
+        "n=14 its κ=0.85 carried a 95% floor of ~0.59, below the 0.6 bar: a high point over an "
+        "unconvinced floor, the exact optimism a release gated on its point estimate would ship. So "
+        f"the set is sized past that point (n={corrected.n}), and the floor ({corrected.kappa_ci[1]:.2f}), "
+        "not just the point, clears the bar.",
         "A judge you have not checked against a known reference is a vibe with a decimal point.",
         "",
     ])

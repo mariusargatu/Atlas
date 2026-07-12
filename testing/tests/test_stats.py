@@ -10,6 +10,7 @@ from evals.stats import (
     bootstrap_ci_bca,
     cluster_bootstrap_ci,
     cohen_kappa,
+    cohen_kappa_interval,
     detectable_effect,
     intervals_overlap,
     mcnemar_exact,
@@ -65,6 +66,36 @@ def test_kappa_rejects_mismatched_or_empty_input():
         cohen_kappa([1, 0], [1])
     with pytest.raises(ValueError):
         cohen_kappa([], [])
+
+
+def test_kappa_interval_brackets_the_point_and_the_floor_is_the_low_end():
+    a = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
+    b = [1, 1, 1, 1, 0, 0, 0, 0, 0, 1]  # 8/10 agree
+    point, lo, hi = cohen_kappa_interval(a, b)
+    assert point == cohen_kappa(a, b)
+    assert lo < point < hi
+    assert -1.0 <= lo and hi <= 1.0
+
+
+def test_kappa_floor_sits_below_the_point_so_a_high_point_can_miss_the_bar():
+    # The whole reason the judge lane gates on the floor: a healthy point can hide a floor under the
+    # bar at small n. Same agreement, smaller n -> wider interval -> lower floor.
+    small = cohen_kappa_interval([1, 1, 1, 0, 0], [1, 1, 0, 0, 0])
+    big = cohen_kappa_interval([1, 1, 1, 0, 0] * 6, [1, 1, 0, 0, 0] * 6)
+    assert small[1] < big[1]            # more data lifts the honest floor
+    assert small[0] == pytest.approx(big[0])  # the point estimate is unchanged by replication
+
+
+def test_kappa_interval_of_a_degenerate_single_class_margin_has_no_spread():
+    # Both raters all-agree, all-ones: expected agreement is 1.0, no spread to build a CI from.
+    assert cohen_kappa_interval([1, 1, 1], [1, 1, 1]) == (1.0, 1.0, 1.0)
+
+
+def test_kappa_interval_rejects_mismatched_or_empty_input():
+    with pytest.raises(ValueError):
+        cohen_kappa_interval([1, 0], [1])
+    with pytest.raises(ValueError):
+        cohen_kappa_interval([], [])
 
 
 # --- mean interval (Wald) ---

@@ -146,7 +146,7 @@ async def main() -> None:
 
         # run_suite resolves each case's declared graders against the _GRADERS registry, so every
         # case is graded by exactly the rule it names (the per case path the case format exists for).
-        report = await run_suite(planner.plan(), build, _GRADERS, k=5)
+        report = await run_suite(planner.plan(), build, _GRADERS, k=5, lane="replay", model_id=_MODEL_ID)
 
     print(report.render())
     print("\n--- machine-readable (the row a nightly run appends to its trend) ---")

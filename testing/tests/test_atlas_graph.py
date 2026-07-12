@@ -374,3 +374,148 @@ async def test_repeated_question_is_served_from_the_cache(tmp_path, seed_cassett
 
     cache_hits = [s for s in tracer.spans if s.name == "cache" and s.attributes.get("hit")]
     assert cache_hits  # the repeat turn short circuited the model
+
+
+# ---- Finding 03: cross-customer cache isolation is enforced by the GRAPH, not just the class ----
+
+@pytest.mark.asyncio
+async def test_cache_isolates_two_customers_on_the_same_account_question(tmp_path, seed_cassette):
+    """Two customers ask the byte-identical account question through ONE shared cache. The answer is
+    customer specific (a bill), so B must be served HER OWN figure, never A's cached one. This is the
+    regression the leaky NaiveCache fails (it keys on the question alone) and the render guard would
+    NOT catch, because a bare amount names no other customer. Goes red under NaiveCache()."""
+    from atlas.domain import accounts
+    from atlas.orchestration.atlas_graph import build_atlas_graph
+
+    q = HumanMessage("What's my bill this month?")
+    # the first-turn request carries no customer id, so it is one shared cassette: the model calls get_bill.
+    seed_cassette(tmp_path, [q], {"content": "", "tool_calls": [{"name": "get_bill", "args": {}, "id": "b1"}]})
+    ai = AIMessage(content="", tool_calls=[{"name": "get_bill", "args": {}, "id": "b1"}])
+
+    def seed_answer(customer_id, answer):
+        b = accounts.get_bill(customer_id)
+        tool_text = serialize_tool_result({"period": b.period, "amount": b.amount, "due_date": b.due_date, "paid": b.paid})
+        tool_msg = ToolMessage(content=tool_text, tool_call_id="b1", name="get_bill")
+        seed_cassette(tmp_path, [q, ai, tool_msg], {"content": answer, "tool_calls": []})
+
+    seed_answer("cust_legacy_term", "Your bill is GBP 39.00.")   # Daniel
+    seed_answer("cust_current", "Your bill is GBP 35.00.")       # Sarah
+
+    gw = GatewayChatModel(model_id="claude-test", cassette_dir=tmp_path, mode="replay")
+    graph = build_atlas_graph(gw, IdFactory("idem"), ActionsBackend(IdFactory("ref")), new_checkpointer())
+
+    a = await graph.ainvoke({"messages": [q], "session": {"customer_id": "cust_legacy_term"}}, {"configurable": {"thread_id": "tA"}})
+    b = await graph.ainvoke({"messages": [q], "session": {"customer_id": "cust_current"}}, {"configurable": {"thread_id": "tB"}})
+    assert a["final_response"] == "Your bill is GBP 39.00."
+    assert b["final_response"] == "Your bill is GBP 35.00."   # NOT served Daniel's cached 39.00
+
+
+# ---- Finding 06: a confirmed write invalidates the cache, so a repeat read is not served stale ----
+
+@pytest.mark.asyncio
+async def test_repeated_read_after_a_confirmed_write_is_not_served_stale(tmp_path, seed_cassette):
+    """A customer reads a figure (cached), changes their own plan (which re-prices the bill), then asks
+    the SAME question again. The confirmed write invalidates their cache, so the repeat read reflects
+    the new state instead of the pre-write figure short-circuited from the cache."""
+    from atlas.domain import accounts
+    from atlas.domain.accounts import apply_write
+    from atlas.domain.catalog import compute_price
+    from atlas.orchestration.atlas_graph import build_atlas_graph
+
+    backend = ActionsBackend(IdFactory("ref"), writer=apply_write)
+    gw = GatewayChatModel(model_id="claude-test", cassette_dir=tmp_path, mode="replay")
+    graph = build_atlas_graph(gw, IdFactory("idem"), backend, new_checkpointer())
+
+    read = HumanMessage("What's my bill this month?")
+    ai_r = AIMessage(content="", tool_calls=[{"name": "get_bill", "args": {}, "id": "b1"}])
+    seed_cassette(tmp_path, [read], {"content": "", "tool_calls": [{"name": "get_bill", "args": {}, "id": "b1"}]})
+
+    def seed_bill_answer(amount, answer):
+        orig = accounts.get_bill("cust_legacy_term")
+        tool_text = serialize_tool_result({"period": orig.period, "amount": amount, "due_date": orig.due_date, "paid": orig.paid})
+        tool_msg = ToolMessage(content=tool_text, tool_call_id="b1", name="get_bill")
+        seed_cassette(tmp_path, [read, ai_r, tool_msg], {"content": answer, "tool_calls": []})
+
+    from decimal import Decimal
+    seed_bill_answer(Decimal("39.00"), "Your bill is GBP 39.00.")                       # turn 1: pre-write
+    seed_bill_answer(compute_price("plan_current_fast"), "Your bill is GBP 35.00.")     # turn 3: post-write, re-priced
+
+    # turn 1: read the bill (cached under the customer key)
+    t1 = await graph.ainvoke({"messages": [read], "session": {"customer_id": "cust_legacy_term"}}, {"configurable": {"thread_id": "r1"}})
+    assert t1["final_response"] == "Your bill is GBP 39.00."
+
+    # turn 2: change the plan and confirm (re-prices the bill, and invalidates the customer's cache)
+    act = HumanMessage("Switch me to the fast plan")
+    seed_cassette(tmp_path, [act], {"content": "", "tool_calls": [{"name": "change_plan", "args": {"plan_id": "plan_current_fast"}, "id": "c1"}]})
+    await graph.ainvoke({"messages": [act], "session": {"customer_id": "cust_legacy_term"}}, {"configurable": {"thread_id": "w1"}})
+    await graph.ainvoke(Command(resume="CONFIRM"), {"configurable": {"thread_id": "w1"}})
+
+    # turn 3: the SAME read question on a fresh thread. Without invalidation it would be served the stale
+    # GBP 39.00 from the cache; with it, the cache misses and the read reflects the re-priced bill.
+    t3 = await graph.ainvoke({"messages": [read], "session": {"customer_id": "cust_legacy_term"}}, {"configurable": {"thread_id": "r3"}})
+    assert t3["final_response"] == "Your bill is GBP 35.00."
+
+
+# ---- Finding 07: refusal paths run model-controlled fragments through the output escaper ----
+
+@pytest.mark.asyncio
+async def test_value_bounds_refusal_does_not_reflect_injected_markup(tmp_path, seed_cassette):
+    """A rejected write argument is model-controlled; the refusal must pass the same output escaper as
+    the render path, so an injected <img ...> plan id never reaches the reply verbatim."""
+    payload = "<img src=x onerror=alert(1)>"
+    user = HumanMessage("Change my plan to the fast one")
+    seed_cassette(tmp_path, [user], {"content": "", "tool_calls": [{"name": "change_plan", "args": {"plan_id": payload}, "id": "c1"}]})
+    graph = _graph(tmp_path, ActionsBackend(IdFactory("ref")))
+    out = await graph.ainvoke(
+        {"messages": [user], "session": {"customer_id": "cust_current"}},
+        {"configurable": {"thread_id": "xss1"}},
+    )
+    assert out["final_response"].startswith("[safe handoff]")
+    assert "<img" not in out["final_response"] and "onerror" not in out["final_response"]
+
+
+# ---- Finding 08: an account read on a thread makes a later knowledge-only turn non-shareable ----
+
+@pytest.mark.asyncio
+async def test_knowledge_turn_after_an_account_read_is_not_shared_generically(tmp_path, seed_cassette):
+    """The 'safe to share' signal is sticky at thread scope. Turn 1 reads the account (account_seen),
+    turn 2 is knowledge-only: it could restate account data from the thread history, so its answer is
+    keyed per-customer, NOT under the shared generic key another customer would hit. Without the sticky
+    flag turn 2 would be marked generic (used_knowledge and not used_account THIS turn) and leak."""
+    from atlas.adapters.inmemory_retriever import InMemoryRetriever
+    from atlas.domain import accounts
+    from atlas.domain.cache import PerCustomerCache
+    from atlas.orchestration.atlas_graph import build_atlas_graph
+
+    cache = PerCustomerCache()  # held so we can inspect the KEY the answer was stored under
+    gw = GatewayChatModel(model_id="claude-test", cassette_dir=tmp_path, mode="replay")
+    graph = build_atlas_graph(gw, IdFactory("idem"), ActionsBackend(IdFactory("ref")), new_checkpointer(), cache=cache)
+
+    # turn 1: an account read -> used_account, so account_seen becomes True and stays True
+    u1 = HumanMessage("What's my bill this month?")
+    ai1 = AIMessage(content="", tool_calls=[{"name": "get_bill", "args": {}, "id": "b1"}])
+    seed_cassette(tmp_path, [u1], {"content": "", "tool_calls": [{"name": "get_bill", "args": {}, "id": "b1"}]})
+    b = accounts.get_bill("cust_legacy_term")
+    toolmsg1 = ToolMessage(content=serialize_tool_result({"period": b.period, "amount": b.amount, "due_date": b.due_date, "paid": b.paid}), tool_call_id="b1", name="get_bill")
+    ans1 = "Your bill is GBP 39.00."
+    seed_cassette(tmp_path, [u1, ai1, toolmsg1], {"content": ans1, "tool_calls": []})
+
+    # turn 2 (same thread): a knowledge-only question that restates nothing new, still keyed per-customer
+    u2 = HumanMessage("What is a data cap?")
+    ai_ans1 = AIMessage(content=ans1)  # turn 1's answer, now in the thread history (see test_multi_turn_...)
+    query = "data cap"
+    ai2 = AIMessage(content="", tool_calls=[{"name": "search_knowledge", "args": {"query": query}, "id": "k1"}])
+    seed_cassette(tmp_path, [u1, ai1, toolmsg1, ai_ans1, u2], {"content": "", "tool_calls": [{"name": "search_knowledge", "args": {"query": query}, "id": "k1"}]})
+    passages = serialize_tool_result([{"doc_id": c.doc_id, "text": c.text} for c in InMemoryRetriever().search(query)])
+    toolmsg2 = ToolMessage(content=passages, tool_call_id="k1", name="search_knowledge")
+    ans2 = "A data cap is a monthly usage limit."
+    seed_cassette(tmp_path, [u1, ai1, toolmsg1, ai_ans1, u2, ai2, toolmsg2], {"content": ans2, "tool_calls": []})
+
+    cfg = {"configurable": {"thread_id": "sticky"}}
+    await graph.ainvoke({"messages": [u1], "session": {"customer_id": "cust_legacy_term"}}, cfg)
+    r2 = await graph.ainvoke({"messages": [u2], "session": {"customer_id": "cust_legacy_term"}}, cfg)
+    assert r2["final_response"] == ans2
+
+    # the knowledge answer is stored PER CUSTOMER, never under the shared generic key another customer hits
+    assert cache.get("cust_legacy_term", "What is a data cap?", generic=False) == ans2
+    assert cache.get("cust_neighbor", "What is a data cap?", generic=True) is None

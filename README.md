@@ -98,6 +98,10 @@ This is a **reference system for a testing series**, not a deployable product:
 - The intent classifier is a deterministic keyword heuristic (no model call, so the lane stays
   reproducible); a production system would classify all intents or let the model propose intent
   under review.
+- The render-time truth guard (`guard.check_render_truth`) is likewise a cue-based heuristic: it
+  catches the demonstrated "contract-free / cancel any time" phrasings against the account oracle,
+  not an arbitrary paraphrase or a wrong fee amount. Grading a numeric claim needs structured-claim
+  extraction, deferred to the metrics article.
 - Auth is first party and demo grade (local signing key, password less sign in as a seeded
   customer); step up authorization is modelled but not gated on real re auth/MFA.
 

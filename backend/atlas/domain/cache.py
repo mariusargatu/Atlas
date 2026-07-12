@@ -21,9 +21,18 @@ class PerCustomerCache:
     def get(self, customer_id: str, question: str, *, generic: bool) -> str | None:
         return self._store.get(self._key(customer_id, question, generic))
 
+    def invalidate(self, customer_id: str) -> None:
+        """Drop this customer's cached answers after a confirmed write changed their account, so a
+        repeat question is recomputed instead of served stale. Generic (customer independent) answers
+        are left alone: a write to one customer does not change a population wide reply. Rebinds the
+        store rather than mutating entries in place."""
+        self._store = {k: v for k, v in self._store.items() if k[0] != customer_id}
+
 
 class NaiveCache:
-    """Keyed only by the question, leaks one customer's answer to another."""
+    """Keyed only by the question, leaks one customer's answer to another. Its `invalidate` is a
+    no-op for the same reason it leaks: with no customer in the key it cannot drop one customer's
+    entries, so it also serves stale data after that customer's own write."""
 
     def __init__(self) -> None:
         self._store: dict[str, str] = {}
@@ -33,3 +42,6 @@ class NaiveCache:
 
     def get(self, customer_id: str, question: str, *, generic: bool) -> str | None:
         return self._store.get(question)
+
+    def invalidate(self, customer_id: str) -> None:
+        return None

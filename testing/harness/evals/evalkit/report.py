@@ -4,9 +4,11 @@ Sampling many trials reports the RATE, never the verdict: a case that passes sev
 a known coin flip, and the same case run once and passing is a landmine labelled safe. This report
 carries the per case and overall pass rates, serializable to JSON so a nightly run can append it to a
 trend file, and it is held to the statistics article's reporting law (07): a metric ships with its
-uncertainty or it does not ship. Every rate in the serialized row carries its Wilson 95% interval
-(enforced by the reporter lint meta test, the analog of "no silent caps"), and where a release
-turns on the tracked rate, `gate()` reads the interval's floor, never the point.
+uncertainty or it does not ship. Every rate carries its interval (per case: Wilson; the OVERALL: a
+case-level cluster bootstrap, because the k trials within a case are correlated and pooling them as
+iid would invent precision, so the overall interval does not shrink as k grows), the row is stamped
+with its provenance (lane + model, so a replay interval never masquerades as a live one), and where
+a release turns on the tracked rate, `gate()` reads the interval's floor, never the point.
 """
 from __future__ import annotations
 
@@ -17,12 +19,14 @@ from evals.evalkit.case import EvalCase
 from evals.evalkit.graders import Grader
 from evals.evalkit.runner import CaseResult, GraphBuild, run_case
 from evals.gate import GateDecision, gate_on_lower_bound
-from evals.stats import wilson_interval
+from evals.stats import wilson_interval, wilson_interval_from_rate
 
 
 @dataclass(frozen=True)
 class EvalReport:
     cases: tuple[CaseResult, ...]
+    lane: str = ""                # provenance: "replay" | "live", which machinery produced this row
+    model_id: str = ""            # provenance: the agent model id the trials ran against
 
     @property
     def total_passes(self) -> int:
@@ -38,8 +42,22 @@ class EvalReport:
 
     @property
     def overall_ci95(self) -> tuple[float, float]:
-        """Wilson 95% interval on the overall rate. Zero trials is honestly (0, 1), never a tight lie."""
-        return wilson_interval(self.total_passes, self.total_trials)
+        """The honest 95% interval on the overall rate, at the CASE level.
+
+        The independent unit is the case, not the trial. The k trials within one case are correlated
+        (on REPLAY they are identical, the same cassette replayed), so pooling all C*k trials into one
+        binomial treats correlated data as independent and invents precision the sample does not have.
+        So the interval is a Wilson score interval at the EFFECTIVE sample size = the number of cases,
+        evaluated at the overall rate. Wilson (a score interval, not a variance estimate) stays honest
+        at the boundary, so an all-safe run of a few cases reads as a wide interval, never a false
+        [1.0, 1.0], and the interval does not shrink as k grows. On REPLAY each case is one
+        deterministic observation, so cases are exactly the independent unit; on LIVE this is
+        conservative (it spends none of the within-case trials, so it never over-claims) and the
+        proper within/between split is the statistics article's GLMM. Zero data is honestly (0, 1)."""
+        n_cases = len(self.cases)
+        if n_cases == 0 or self.total_trials == 0:
+            return (0.0, 1.0)
+        return wilson_interval_from_rate(self.overall_rate, n_cases)
 
     def gate(self, *, threshold: float, variance_budget: float) -> GateDecision:
         """Gate the tracked rate on the interval's floor, never the point (the 07 rule).
@@ -54,11 +72,15 @@ class EvalReport:
     def as_dict(self) -> dict:
         """A plain view serializable to JSON, the row a nightly run appends to its trend file.
 
-        Every rate travels with its Wilson 95% interval: the trend file is the eval lane's
-        headline surface, and a bare point estimate there is exactly the anecdote the
-        statistics article exists to outlaw.
+        Every rate travels with its interval, and the row is STAMPED with its provenance: the lane
+        that produced it (replay/live) and the agent model id. Without the lane stamp a degenerate
+        REPLAY interval (k identical replays of one cassette) would sit in a trend beside real LIVE
+        rows with no way to tell them apart; a number without provenance is weather, not a
+        measurement. The overall interval is computed at the case level (see `overall_ci95`), so it
+        does not shrink as k grows.
         """
         return {
+            "provenance": {"lane": self.lane, "model_id": self.model_id},
             "overall": {
                 "passes": self.total_passes,
                 "trials": self.total_trials,
@@ -102,8 +124,13 @@ class EvalReport:
         return header + "\n" + "\n".join(lines)
 
 
-def build_report(results: tuple[CaseResult, ...] | list[CaseResult]) -> EvalReport:
-    return EvalReport(cases=tuple(results))
+def build_report(
+    results: tuple[CaseResult, ...] | list[CaseResult],
+    *,
+    lane: str = "",
+    model_id: str = "",
+) -> EvalReport:
+    return EvalReport(cases=tuple(results), lane=lane, model_id=model_id)
 
 
 def _grader_resolver(graders):
@@ -125,6 +152,9 @@ async def run_suite(
     build: GraphBuild,
     graders: Sequence[Grader] | Mapping[str, Grader],
     k: int = 1,
+    *,
+    lane: str = "",
+    model_id: str = "",
 ) -> EvalReport:
     """Drive a whole case set and aggregate into one report, the eval lane's top level call.
 
@@ -138,7 +168,7 @@ async def run_suite(
     """
     resolve = _grader_resolver(graders)
     results = [await run_case(case, build, resolve(case), k) for case in cases]
-    return build_report(results)
+    return build_report(results, lane=lane, model_id=model_id)
 
 
 __all__ = ["EvalReport", "build_report", "run_suite"]

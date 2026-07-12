@@ -9,15 +9,18 @@ calls everything "pass" scores 80% while contributing nothing.
 The bar is a licensing threshold: kappa >= 0.6 (the moderate/substantial boundary on Landis & Koch,
 1977) licenses automating the metric. Below it, fix the rubric or keep the check manual. The report
 carries the judge contract, so an agreement number is never read apart from the instrument that
-earned it, and the bar gates on the point estimate here while a confidence interval on kappa is the
-statistics article's job.
+earned it, and the bar gates on the interval FLOOR, not the point: a point kappa above the bar whose
+lower bound sits below it has not cleared it, the same gate-on-the-lower-bound rule the release gate
+and the benchmark study apply. That is why the calibration set is sized past the point where a high
+kappa's floor clears the bar (n=14 leaves kappa 0.85 with a floor of ~0.59, still short; the set is
+grown until the floor, not the point, is over the line).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from evals.judge.contract import JudgeContract
-from evals.stats import cohen_kappa
+from evals.stats import cohen_kappa, cohen_kappa_interval
 
 AUTOMATION_BAR = 0.6  # Cohen's kappa floor that licenses automating a metric
 
@@ -52,22 +55,31 @@ class CalibrationReport:
         return cohen_kappa([r.human for r in self.rows], [r.judge for r in self.rows])
 
     @property
+    def kappa_ci(self) -> tuple[float, float, float]:
+        """The kappa point estimate with its 95% confidence interval, as (point, lo, hi)."""
+        return cohen_kappa_interval([r.human for r in self.rows], [r.judge for r in self.rows])
+
+    @property
     def raw_agreement(self) -> float:
         """The flattering number, reported only to show the gap kappa reveals."""
         return sum(1 for r in self.rows if r.agree) / self.n if self.n else 0.0
 
     @property
     def licensed(self) -> bool:
-        """Whether this judge clears the bar to automate the metric."""
-        return self.kappa >= self.bar
+        """Whether this judge clears the bar to automate the metric, read on the interval FLOOR,
+        never the point. A point kappa above the bar whose lower bound sits below it has NOT
+        cleared it: the repo's own gate-on-the-lower-bound rule (`gate.py`, the benchmark study),
+        applied to the judge lane. A judge licensed on a point at small n is the same optimism a
+        release gated on its point estimate is."""
+        return self.kappa_ci[1] >= self.bar
 
     def render(self) -> str:
         verdict = "LICENSED to automate" if self.licensed else "NOT licensed, keep manual / fix the rubric"
         lines = [
             f"judge contract: {self.contract.judge_model_id} / {self.contract.rubric_version} "
             f"/ tmpl:{self.contract.prompt_template_hash[:8]} (fp:{self.contract.fingerprint()[:8]})",
-            f"n={self.n}  raw agreement={self.raw_agreement:.0%}  Cohen's kappa={self.kappa:.2f}  "
-            f"bar={self.bar:.2f}  -> {verdict}",
+            f"n={self.n}  raw agreement={self.raw_agreement:.0%}  Cohen's kappa={self.kappa:.2f} "
+            f"95% CI [{self.kappa_ci[1]:.2f}, {self.kappa_ci[2]:.2f}]  bar={self.bar:.2f}  -> {verdict}",
         ]
         for r in self.rows:
             mark = "ok " if r.agree else "MISS"

@@ -27,14 +27,29 @@ FORBIDDEN_ATLAS_PREFIXES = ("atlas.orchestration", "atlas.adapters", "atlas.mcp_
 FORBIDDEN_EVAL_TOPLEVEL = ("evals", "evalkit", "drift", "inference_oracle", "testing")
 
 
+def _resolve_relative(path: pathlib.Path, level: int, module: str | None) -> str:
+    """Resolve a relative import (``from .`` / ``from ..``) to its absolute dotted path.
+
+    `from ..orchestration import x` inside ``backend/atlas/domain/foo.py`` resolves to
+    ``atlas.orchestration``, so the SAME outer-ring / framework checks apply. Without this the
+    relative form would be silently skipped and a pure layer could reach outward through it."""
+    pkg = list(path.relative_to(ROOT / "backend").with_suffix("").parts)[:-1]  # the file's package
+    up = pkg[: len(pkg) - (level - 1)]                                          # climb one per extra dot
+    return ".".join([*up, module]) if module else ".".join(up)
+
+
 def _imports(path: pathlib.Path):
     tree = ast.parse(path.read_text(), filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 yield alias.name, node.lineno
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            yield node.module, node.lineno
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                if node.module:
+                    yield node.module, node.lineno
+            else:  # a relative import: resolve to absolute so the layering rules are not evaded
+                yield _resolve_relative(path, node.level, node.module), node.lineno
 
 
 def _pure_files():
@@ -72,3 +87,12 @@ def test_agent_harness_never_imports_the_eval_harness():
             if module.split(".")[0] in FORBIDDEN_EVAL_TOPLEVEL:
                 violations.append(f"{path.relative_to(ROOT)}:{lineno} imports {module}")
     assert not violations, "agent harness leaked an eval-harness import:\n" + "\n".join(violations)
+
+
+def test_relative_imports_resolve_to_absolute_so_the_layers_are_not_evaded():
+    # The blind spot this closes: a pure-layer file reaching outward via `from ..` would be skipped by
+    # a level==0-only matcher. Resolution maps it back to the absolute path the layering rules catch.
+    dom = ROOT / "backend/atlas/domain/example.py"
+    assert _resolve_relative(dom, 1, "guard") == "atlas.domain.guard"
+    assert _resolve_relative(dom, 2, "orchestration.atlas_graph") == "atlas.orchestration.atlas_graph"
+    assert _resolve_relative(dom, 2, "orchestration").startswith(FORBIDDEN_ATLAS_PREFIXES)

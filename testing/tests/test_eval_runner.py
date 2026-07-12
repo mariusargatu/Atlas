@@ -19,7 +19,7 @@ from evals.evalkit.report import build_report, run_suite
 from evals.evalkit.runner import CaseResult, TrialResult, _drive, _trial_passed, run_case
 from evals.gate import GateVerdict
 from evals.scaffold import build_replay_graph
-from evals.stats import wilson_interval
+from evals.stats import wilson_interval, wilson_interval_from_rate
 
 _MODEL_ID = "claude-test"
 
@@ -183,6 +183,12 @@ def _synthetic_case(case_id: str, passes: int, k: int) -> CaseResult:
     return CaseResult(case_id, passes, k, trials)
 
 
+def _cases_at(n_cases: int, n_pass: int, k: int = 1) -> list[CaseResult]:
+    """`n_cases` single-outcome cases, `n_pass` of them fully passing. The independent unit is the
+    case, so this is the honest way to build a report whose overall floor turns on the case count."""
+    return [_synthetic_case(f"c{i}", k if i < n_pass else 0, k) for i in range(n_cases)]
+
+
 def test_report_aggregates_rate_across_cases():
     report = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)])
     assert report.total_passes == 16 and report.total_trials == 20 and report.overall_rate == 0.8
@@ -198,12 +204,33 @@ def test_report_serializes_to_json_friendly_dict():
 # ---- no bare point estimates: every rate the report ships carries its interval ----
 
 
-def test_every_rate_ships_with_its_wilson_interval():
+def test_every_rate_ships_with_its_interval():
     report = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)])
     body = report.as_dict()
-    assert body["overall"]["ci95"] == list(wilson_interval(16, 20))
+    # the OVERALL interval is at the case level (n_eff = 2 cases), not a pooled 20-trial binomial:
+    # pooling correlated within-case trials would invent precision (Finding 04).
+    assert body["overall"]["ci95"] == list(wilson_interval_from_rate(0.8, 2))
+    # per-case intervals remain Wilson over that case's own trials (honest on LIVE)
     assert body["cases"][0]["ci95"] == list(wilson_interval(7, 10))
     assert body["cases"][1]["ci95"] == list(wilson_interval(9, 10))
+
+
+def test_overall_interval_does_not_shrink_as_trials_per_case_grow():
+    # The Finding-04 anti-pattern: on REPLAY the k trials of a case are identical, so more of them add
+    # no independent information. The overall interval is keyed to the number of CASES, so replicating
+    # each case's trials must NOT tighten it (a pooled C*k binomial would).
+    few = build_report([_synthetic_case("a", 1, 1), _synthetic_case("b", 1, 1)])       # 2 cases, k=1
+    many = build_report([_synthetic_case("a", 50, 50), _synthetic_case("b", 50, 50)])  # same 2 cases, k=50
+    assert few.overall_ci95 == many.overall_ci95
+    pooled = wilson_interval(100, 100)  # the false-precision interval the naive report shipped
+    assert (many.overall_ci95[1] - many.overall_ci95[0]) > (pooled[1] - pooled[0])
+
+
+def test_trend_row_is_stamped_with_its_provenance():
+    # A number without provenance is weather: a replay interval must not sit unmarked in a trend
+    # beside a live one. The reporter-lint permits the extra block; the demo stamps lane + model.
+    body = build_report([_synthetic_case("a", 5, 5)], lane="replay", model_id="claude-test").as_dict()
+    assert body["provenance"] == {"lane": "replay", "model_id": "claude-test"}
 
 
 def test_reporter_lint_no_dict_carries_a_rate_without_an_interval():
@@ -233,7 +260,7 @@ def test_empty_report_admits_it_knows_nothing():
 
 def test_render_header_carries_the_interval():
     out = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)]).render()
-    lo, hi = wilson_interval(16, 20)
+    lo, hi = wilson_interval_from_rate(0.8, 2)  # case-level overall interval, n_eff = 2 cases
     assert f"Wilson 95% CI [{lo:.3f}, {hi:.3f}]" in out
 
 
@@ -241,20 +268,21 @@ def test_render_header_carries_the_interval():
 
 
 def test_report_gates_on_the_lower_bound_not_the_point():
-    # 16/20 is a 0.80 point with a floor near 0.58: it must NOT clear a 0.75 bar.
-    report = build_report([_synthetic_case("a", 7, 10), _synthetic_case("b", 9, 10)])
+    # 32/40 cases is a 0.80 point with a case-level floor near 0.65: it must NOT clear a 0.75 bar.
+    report = build_report(_cases_at(40, 32))
     decision = report.gate(threshold=0.75, variance_budget=0.5)
     assert decision.verdict is GateVerdict.FAIL
     assert report.overall_rate >= 0.75  # the point clears, but the gate still holds the release
 
 
 def test_report_gate_passes_when_the_floor_clears():
-    report = build_report([_synthetic_case("a", 96, 100), _synthetic_case("b", 98, 100)])
+    # 196/200 cases: the case-level floor (~0.95) clears a 0.90 bar within a 0.10 budget.
+    report = build_report(_cases_at(200, 196))
     assert report.gate(threshold=0.90, variance_budget=0.10).verdict is GateVerdict.PASS
 
 
 def test_report_gate_quarantines_an_interval_wider_than_the_budget():
-    report = build_report([_synthetic_case("a", 4, 5)])  # n=5: honest width is huge
+    report = build_report(_cases_at(5, 4))  # only 5 cases: the honest case-level width is huge
     assert report.gate(threshold=0.5, variance_budget=0.2).verdict is GateVerdict.QUARANTINE
 
 

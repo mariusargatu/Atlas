@@ -2,9 +2,11 @@
 
 The drift lane (the fourth gateway reading) re-runs the pinned agent against a new model snapshot
 and asks whether behaviour moved. "Behaviour" is not the prose, it is the decisions: the intent the
-turn bound, the tools it called and in what order, the guard verdicts it produced, and the terminal
-outcome. The shipped text is kept too, but as a SEPARATE digest, so a reworded but equivalent answer
-(prose drift) never masquerades as a changed decision (behavioural drift). See the drift compare.
+turn bound, the tools it called (with each WRITE's arguments) and in what order, the guard verdicts it
+produced, and the terminal outcome. Carrying the write arguments is load bearing: change_plan to a
+different valid plan is a different decision, not a reword, and a name-only trajectory would miss it.
+The shipped text is kept too, but as a SEPARATE digest, so a reworded but equivalent answer (prose
+drift) never masquerades as a changed decision (behavioural drift). See the drift compare.
 
 Every decision is read from the TRACE (the structural record the runtime emits), never re-derived
 or parsed out of the English. Reading prose to recover a decision is the wrong altitude: a benign
@@ -15,10 +17,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from determinism.canonical import digest
-from tracing import guard_outcomes, tool_names, write_applied
+from determinism.canonical import canonical, digest
+from tracing import guard_outcomes, tool_calls, write_applied
 
-from atlas.domain.binding import classify_intent
+from atlas.domain.binding import WRITE_TOOLS, classify_intent
 
 # The decision fields (the part of a run that must not silently move), and the SINGLE source of truth
 # for what counts as a decision. `decision_digest()` here and the drift `compare()` both iterate this
@@ -30,7 +32,7 @@ DECISION_KEYS = ("intent", "tools", "guards", "outcome")
 @dataclass(frozen=True)
 class DecisionRecord:
     intent: str                                  # the intent the runtime BOUND (read from the trace)
-    tools: tuple[str, ...]                        # tool names called, in order (the trajectory)
+    tools: tuple[tuple[str, object], ...]         # (name, canonical write-args | None) per call, in order
     guards: tuple[tuple[str, bool], ...]          # (guard_name, ok) verdicts, in order
     outcome: str                                 # "answer" | "handoff" | "write-applied"
     claim_digest: str                            # digest of the shipped text: prose, kept apart
@@ -80,7 +82,14 @@ def extract(utterance: str, trace, final_response: str) -> DecisionRecord:
     """
     return DecisionRecord(
         intent=_intent_from_trace(trace) or classify_intent(utterance),
-        tools=tuple(tool_names(trace)),
+        # A WRITE carries its canonical args (change_plan to WHICH plan is a different DECISION,
+        # not a reword); a read keeps only its name, so noisy read args (get_bill(month=...)) do
+        # not manufacture false behavioural drift. Args are canonicalized so a value-equal call
+        # never reads as a change.
+        tools=tuple(
+            (name, canonical(args)) if name in WRITE_TOOLS else (name, None)
+            for name, args in tool_calls(trace)
+        ),
         guards=tuple(guard_outcomes(trace)),
         outcome=_outcome_of(trace),
         claim_digest=digest(final_response or ""),

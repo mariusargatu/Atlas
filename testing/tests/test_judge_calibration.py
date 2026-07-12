@@ -77,20 +77,23 @@ def test_the_naive_judge_fails_the_bar_and_the_corrected_judge_clears_it():
         JudgeContract(_JUDGE_ID, RUBRIC_V2.version, template_hash(RUBRIC_V2)),
         ids, humans, corrected_labels(),
     )
-    # the lying judge: barely better than chance, in the Landis-Koch "fair" band, fails 0.6
-    assert 0.2 <= naive.kappa < 0.45
+    # the lying judge: barely better than chance, fails 0.6 on the point AND the floor
+    assert 0.15 <= naive.kappa < 0.45
     assert not naive.licensed
-    # after the correction: almost perfect agreement (Landis-Koch 0.81-1.0), clears the automation bar
+    assert naive.kappa_ci[1] < 0.6            # its floor is nowhere near the bar
+    # after the correction: near-perfect agreement, and it clears the bar on the FLOOR, not just
+    # the point. Licensing reads the lower bound: a point over the bar with a floor below it (which
+    # is what n=14 gives at kappa 0.85) has not cleared it, so the set is sized until the floor does.
     assert corrected.kappa >= 0.6
+    assert corrected.kappa_ci[1] >= 0.6       # the licence-bearing quantity: the honest floor clears
     assert corrected.licensed
     # the correction is real movement, not noise on the raw number
     assert corrected.kappa - naive.kappa > 0.3
     # pin the headline numbers the docstrings and the artifact quote, so the data and the prose
-    # cannot drift apart again (a stale 0.71 once slipped through these loose bands). Both kappa AND
-    # raw agreement are pinned, because the study prose names the 64% raw figure too.
-    assert round(naive.kappa, 2) == 0.29
+    # cannot drift apart again. Both kappa AND raw agreement are pinned (the study prose names them).
+    assert round(naive.kappa, 2) == 0.21
     assert round(corrected.kappa, 2) == 0.85
-    assert round(naive.raw_agreement, 2) == 0.64
+    assert round(naive.raw_agreement, 2) == 0.61
     assert round(corrected.raw_agreement, 2) == 0.93
 
 

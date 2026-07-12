@@ -41,6 +41,16 @@ def tool_names(spans) -> list[str]:
     return [s.name for s in spans_of_kind(spans, "tool")]
 
 
+def tool_calls(spans) -> list[tuple[str, Mapping]]:
+    """The trajectory WITH arguments: (tool name, its args) per tool span, in call order.
+
+    `tool_names` keeps only the name; but for a WRITE the decision is the name AND its arguments
+    (change_plan to WHICH plan), so the drift lane reads this to catch a same-tool, different-argument
+    move that a name-only trajectory is blind to. Args come straight off the tool span
+    (``attributes["args"]``, recorded by the graph), empty when a tool carried none."""
+    return [(s.name, s.attributes.get("args", {})) for s in spans_of_kind(spans, "tool")]
+
+
 def guard_outcomes(spans) -> list[tuple[str, bool]]:
     """(guard_name, ok) per guard span, in order. ok defaults False when a span is unannotated."""
     return [(s.name, bool(s.attributes.get("ok"))) for s in spans_of_kind(spans, "guard")]
@@ -108,5 +118,5 @@ class InMemoryTracer:
 
 __all__ = [
     "InMemoryTracer", "NullTracer", "Span", "Tracer",
-    "spans_of_kind", "tool_names", "guard_outcomes", "write_applied",
+    "spans_of_kind", "tool_names", "tool_calls", "guard_outcomes", "write_applied",
 ]

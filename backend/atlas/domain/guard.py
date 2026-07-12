@@ -102,8 +102,15 @@ def check_no_other_customer(text: str, customer_id: str) -> GuardVerdict:
 
 def check_render_truth(text: str, customer_id: str) -> GuardVerdict:
     """Content check (pre render): a 'no contract / no fee' claim served to a customer who actually
-    has a term contradicts the account oracle, the cold open's last line render catch. The oracle,
-    not the wording, decides. This is the single home of the contradiction rule.
+    has a term contradicts the account oracle, the cold open's last line render catch.
+
+    Scope, stated honestly: this is a cue-based heuristic. A cue from `_NO_CONTRACT_CUES` must be
+    present *first*, and only then does the account oracle decide the contradiction. So it catches the
+    demonstrated affirmative phrasings, not an arbitrary paraphrase ("you're free to leave") or a wrong
+    fee *amount* (grading a numeric claim needs structured-claim extraction, deferred to the metrics
+    article). It is the single home of the contradiction *rule*, kept deliberately narrow and
+    reproducible; the eval grader (`metric_graders`) reuses it so the eval can never grade more
+    leniently than the runtime.
     """
     claims_no_contract = any(cue in text.lower() for cue in _NO_CONTRACT_CUES)
     if claims_no_contract and truth_for(customer_id).has_contract:

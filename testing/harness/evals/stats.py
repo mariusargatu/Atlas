@@ -29,10 +29,25 @@ def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, flo
         raise ValueError(f"need 0 <= successes <= n, got successes={successes}, n={n}")
     if n == 0:
         return (0.0, 1.0)  # no data -> the only honest interval is the whole range, never (0, 0)
-    p = successes / n
+    return wilson_interval_from_rate(successes / n, n, z)
+
+
+def wilson_interval_from_rate(rate: float, n: int, z: float = 1.96) -> tuple[float, float]:
+    """The Wilson score interval from a proportion and a sample size, so a caller can pass an
+    EFFECTIVE n (e.g. the number of independent clusters) instead of a raw success count.
+
+    Same score interval as `wilson_interval` (which delegates here). It always brackets `rate` and
+    stays honest at the boundary (rate 0 or 1), where a variance-based or bootstrap interval collapses
+    to zero width, reading a handful of all-agreeing observations as certainty. That boundary honesty
+    is why the eval report gates the overall rate on this at the case level, not on a bootstrap.
+    """
+    if not 0.0 <= rate <= 1.0:
+        raise ValueError(f"rate must be in [0, 1], got {rate}")
+    if n <= 0:
+        return (0.0, 1.0)
     denom = 1 + z * z / n
-    center = (p + z * z / (2 * n)) / denom
-    half = (z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom
+    center = (rate + z * z / (2 * n)) / denom
+    half = (z * math.sqrt(rate * (1 - rate) / n + z * z / (4 * n * n))) / denom
     return (max(0.0, center - half), min(1.0, center + half))
 
 
@@ -63,6 +78,37 @@ def cohen_kappa(rater_a: list[int], rater_b: list[int]) -> float:
     if expected == 1.0:
         return 1.0
     return (observed - expected) / (1 - expected)
+
+
+def cohen_kappa_interval(
+    rater_a: list[int], rater_b: list[int], *, z: float = 1.96
+) -> tuple[float, float, float]:
+    """A large-sample confidence interval for Cohen's kappa, returned as (point, lo, hi).
+
+    Closed form and cheap, the same discipline as `wilson_interval` and `mean_interval`: the
+    asymptotic standard error SE = sqrt(p_o (1 - p_o) / (n (1 - p_e)^2)) (Fleiss, Cohen & Everitt
+    1969), a normal z either side, clamped to [-1, 1]. Pure `math`, no bootstrap, so it lives
+    beside `cohen_kappa` in the same module the judge lane already imports.
+
+    Why it exists: licensing a judge on the POINT kappa is the "gate on the point, not the floor"
+    mistake this repo argues against everywhere else (`gate.py`, the benchmark study). The floor
+    (`lo`) is the quantity a licence should read. Small n, or a margin pinned at one class, makes
+    the normal approximation loose, exactly where a bootstrap on kappa is the honest tool (deferred
+    to the statistics article) but the floor is still the right thing to gate on.
+    """
+    n = len(rater_a)
+    if n == 0 or len(rater_b) != n:
+        raise ValueError("raters must be equal length and not empty")
+    point = cohen_kappa(rater_a, rater_b)
+    observed = sum(1 for x, y in zip(rater_a, rater_b) if x == y) / n
+    pa = sum(rater_a) / n
+    pb = sum(rater_b) / n
+    expected = pa * pb + (1 - pa) * (1 - pb)
+    if expected >= 1.0:  # a degenerate single-class margin has no spread to build an interval from
+        return (point, point, point)
+    se = math.sqrt(observed * (1 - observed) / (n * (1 - expected) ** 2))
+    half = z * se
+    return (point, max(-1.0, point - half), min(1.0, point + half))
 
 
 def mean_interval(values: Sequence[float], z: float = 1.96) -> tuple[float, float, float]:
@@ -431,6 +477,7 @@ __all__ = [
     "bootstrap_ci_bca",
     "cluster_bootstrap_ci",
     "cohen_kappa",
+    "cohen_kappa_interval",
     "detectable_effect",
     "intervals_overlap",
     "mcnemar_exact",
@@ -442,4 +489,5 @@ __all__ = [
     "required_n",
     "variance_components",
     "wilson_interval",
+    "wilson_interval_from_rate",
 ]

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import HumanMessage
 
-from determinism.canonical import digest
+from determinism.canonical import canonical, digest
 from tracing import Span
 
 from evals.drift.compare import compare
@@ -74,9 +74,26 @@ def test_compare_changed_outcome_and_guard_is_behavioural_drift():
 
 def test_compare_changed_tools_is_behavioural_drift():
     old = _record(tools=())
-    new = _record(tools=("get_account_summary",))
+    new = _record(tools=(("get_account_summary", None),))
     report = compare(old, new)
     assert report.severity() == "behavioural" and report.changed_decisions == ("tools",)
+
+
+def test_same_write_tool_with_different_args_is_behavioural_drift():
+    # The Finding-02 regression: change_plan to a DIFFERENT valid plan is a different DECISION, not a
+    # reword. A name-only trajectory reads these as identical; carrying the write args catches the move.
+    old = _record(tools=(("change_plan", canonical({"plan_id": "plan_current_fast"})),))
+    new = _record(tools=(("change_plan", canonical({"plan_id": "plan_legacy_value"})),))
+    report = compare(old, new)
+    assert report.severity() == "behavioural" and report.changed_decisions == ("tools",)
+    assert old.decision_digest() != new.decision_digest()
+
+
+def test_same_write_tool_with_equal_args_is_not_drift():
+    # Value-equal (canonicalized) write args must NOT read as a change, or every rerun is false drift.
+    old = _record(tools=(("change_plan", canonical({"plan_id": "plan_current_fast"})),))
+    new = _record(tools=(("change_plan", canonical({"plan_id": "plan_current_fast"})),))
+    assert compare(old, new).severity() == "none"
 
 
 def test_render_speaks_each_severity():
@@ -113,9 +130,9 @@ def test_extract_reads_outcome_from_spans_not_prose():
 # ---- the load bearing property: the decision digest ignores prose ----
 
 def test_decision_digest_ignores_prose_but_catches_decisions():
-    base = _record(tools=("get_bill",), claim="forty pounds")
-    reworded = _record(tools=("get_bill",), claim="GBP 40.00")        # same decisions, new words
-    moved = _record(tools=("get_bill", "get_usage"), claim="forty pounds")  # a decision moved
+    base = _record(tools=(("get_bill", None),), claim="forty pounds")
+    reworded = _record(tools=(("get_bill", None),), claim="GBP 40.00")        # same decisions, new words
+    moved = _record(tools=(("get_bill", None), ("get_usage", None)), claim="forty pounds")  # a decision moved
     assert base.decision_digest() == reworded.decision_digest()       # prose drift -> same digest
     assert base.decision_digest() != moved.decision_digest()          # behavioural drift -> different
 
