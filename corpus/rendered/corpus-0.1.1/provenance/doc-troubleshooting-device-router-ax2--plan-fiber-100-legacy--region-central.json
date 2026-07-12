@@ -1,5 +1,5 @@
 {
-  "doc_id": "doc-troubleshooting-device-router-ax2--plan-fiber-100-legacy--region-coast",
+  "doc_id": "doc-troubleshooting-device-router-ax2--plan-fiber-100-legacy--region-central",
   "doc_type": "troubleshooting",
   "placements": [
     {
@@ -13,13 +13,13 @@
     {
       "fact_ref": "device-router-ax2:firmware_version",
       "span": [
-        273,
-        278
+        275,
+        280
       ],
       "value": "1.4.2"
     },
     {
-      "fact_ref": "plan-fiber-100-legacy--region-coast:name",
+      "fact_ref": "plan-fiber-100-legacy--region-central:name",
       "span": [
         87,
         103
@@ -27,7 +27,7 @@
       "value": "Fiber 100 Legacy"
     },
     {
-      "fact_ref": "plan-fiber-100-legacy--region-coast:monthly_price",
+      "fact_ref": "plan-fiber-100-legacy--region-central:monthly_price",
       "span": [
         196,
         201
@@ -35,12 +35,12 @@
       "value": "28.99"
     },
     {
-      "fact_ref": "plan-fiber-100-legacy--region-coast:region",
+      "fact_ref": "plan-fiber-100-legacy--region-central:region",
       "span": [
         219,
-        231
+        233
       ],
-      "value": "region-coast"
+      "value": "region-central"
     }
   ]
 }

@@ -3,7 +3,7 @@
 If your Modem D3 is not connecting properly on the Fiber 100 plan, try
 these steps.
 
-Applies to Fiber 100 at 33.99 per month in the region-north region.
+Applies to Fiber 100 at 26.99 per month in the region-north region.
 
 1. Confirm the device firmware is at version 3.2.1 or later.
 2. Power cycle the Modem D3 for 30 seconds, then reconnect.

@@ -58,6 +58,7 @@ from dataset_tools import manifest
 from quality.retrieval_report import CaseRetrieval, evaluate
 from rag_tools import ingest
 from rag_tools.smoke import MAX_TOKENS, QUESTION as _SMOKE_QUESTION, _generation_half, _keyed_provider
+from .fixtures import corpus_expectations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INDEX_DIR = REPO_ROOT / "indexes" / "corpus-0.1.1-bge-m3-03f983e0"
@@ -98,7 +99,7 @@ def ensure_chunks_loaded() -> int:
         row_count = ingest.load_parquet(
             conn, INDEX_DIR / "chunks.parquet", dim=fp["dim"], build_id=build_manifest["index_build_id"]
         )
-    assert row_count == 45
+    assert row_count == corpus_expectations.CHUNK_COUNT
     return row_count
 
 

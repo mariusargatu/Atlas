@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-500--region-coast:download_mbps",
       "span": [
-        206,
-        209
+        236,
+        239
       ],
       "value": "500"
     },
     {
       "fact_ref": "plan-fiber-500--region-coast:upload_mbps",
       "span": [
-        236,
-        239
+        258,
+        261
       ],
       "value": "500"
     },
@@ -32,7 +32,7 @@
         278,
         283
       ],
-      "value": "36.99"
+      "value": "43.99"
     },
     {
       "clause": "No contract. Cancel any time.",

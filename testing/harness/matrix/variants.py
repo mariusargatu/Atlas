@@ -46,7 +46,7 @@ from langchain_core.messages import HumanMessage
 from quality import ir_metrics
 from quality.agent_metrics import answer_correctness_rate
 
-from atlas.domain.retrieval import RetrievalConfig
+from atlas.domain.retrieval import K_FINAL, K_FUSED, RetrievalConfig
 from atlas.orchestration.agentic_rag import build_agentic_rag_graph, build_generate_prompt
 from atlas.orchestration.graph_rag import build_graph_rag_graph
 from atlas.ports.knowledge import Chunk, Retriever
@@ -61,11 +61,10 @@ GRAPH = "graph"
 #: Every id this stage ever produces a row for, in a stable (never dict/set-derived) order.
 VARIANT_IDS: tuple[str, ...] = (AGENTIC, GRAPH, NAIVE)
 
-# Retrieval widths, matching `agentic_rag`/`graph_rag`'s own `_K_FUSED`/`_K_FINAL` (the naive
-# variant's fixed pipeline uses the identical widths so a "wider pool, then truncate" comparison is
-# apples to apples across all three, never a narrower or wider naive baseline than its siblings get).
-_K_FUSED = 20
-_K_FINAL = 3
+# Retrieval widths come from `domain.retrieval` (K_FUSED/K_FINAL), shared with both LangGraph
+# variants and `knowledge_server.DEPLOYED_K`, so the naive variant's fixed pipeline provably uses
+# the identical widths and a "wider pool, then truncate" comparison is apples to apples across all
+# three rather than kept so by comment.
 
 
 @dataclass(frozen=True)
@@ -151,10 +150,14 @@ async def _run_naive(
 ) -> VariantResult:
     per_case: dict[str, VariantCaseResult] = {}
     for case in cases:
+        # `k_final=K_FUSED` matters: `PgvectorRetriever` truncates to `config.k_final` BEFORE the
+        # port's own `k` cap applies, so leaving `k_final` at RetrievalConfig's default 5 would hand
+        # the reranker a pool of 5, not the K_FUSED=20 this call asks for. Hermetically invisible
+        # (InMemoryRetriever reads no config field), which is exactly why it needs saying.
         candidates = retriever.search_chunks(
-            case.query, k=_K_FUSED, config=RetrievalConfig(rerank_enabled=False, k_fused=_K_FUSED)
+            case.query, k=K_FUSED, config=RetrievalConfig(rerank_enabled=False, k_fused=K_FUSED, k_final=K_FUSED)
         )
-        chunks = reranker.rerank(case.query, candidates)[:_K_FINAL]
+        chunks = reranker.rerank(case.query, candidates)[:K_FINAL]
         prompt = build_generate_prompt(case.query, chunks, corrective=False)
         answer = await _agenerate_text(gateway, prompt)
         per_case[case.case_id] = _score(case, chunks, answer, k)
@@ -198,7 +201,7 @@ async def run_variant_comparison(
     reranker: Reranker,
     graph: KnowledgeGraph,
     gateway: BaseChatModel,
-    k: int = _K_FINAL,
+    k: int = K_FINAL,
 ) -> dict[str, VariantResult]:
     """Run naive, agentic, and graph over the SAME `cases`, sharing the SAME
     retriever/reranker/graph/gateway fixtures. Returns one `VariantResult` per `VARIANT_IDS` entry,
@@ -224,7 +227,7 @@ class VariantsConfig:
     reranker: Reranker
     graph: KnowledgeGraph
     gateway: BaseChatModel
-    k: int = _K_FINAL
+    k: int = K_FINAL
 
 
 def variant_comparison_rows(results: dict[str, VariantResult]) -> list[dict]:

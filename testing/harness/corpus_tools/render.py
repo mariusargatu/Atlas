@@ -28,22 +28,72 @@ adds.
 from __future__ import annotations
 
 import random
+import string
 from dataclasses import dataclass
 from pathlib import Path
 
 from corpus_tools.registry import Entity, Registry, RegistryError
 
-# doc_type -> template variant suffixes available; the renderer picks one per document via the
-# per document rng, so template choice does not depend on entity iteration order.
-_VARIANTS: dict[str, tuple[str, ...]] = {
-    "plan_page": ("a", "b"),
-    "contract_terms": ("a",),
-    "troubleshooting": ("a", "b"),
-    "device_manual": ("a",),
-    "policy": ("a",),
-    "promo_page": ("a",),
-    "fee_schedule": ("a",),
-}
+#: One fact's placement instruction: (fact_ref, value, context_key, anchor).
+#:
+#: `context_key` names the TEMPLATE PLACEHOLDER the fact renders into, and `anchor` is the exact
+#: substring to locate INSIDE that placeholder's own rendered text (equal to `value` for every fact
+#: that renders as a bare value; a whole prose clause where the fact is expressed in words).
+#:
+#: The `context_key` is what makes the span correct. Placements used to carry only an anchor,
+#: located by `text.find(anchor, cursor)` over the WHOLE document from a forward walking cursor,
+#: which silently mis-attributed any fact whose anchor also occurs earlier in the document as part
+#: of some other value. On the committed corpus that put 28 spans on the wrong text across 15 docs:
+#: on every symmetric plan page, `download_mbps` landed on the "100" inside the plan NAME
+#: ("offer the Fiber 100 broadband plan"), `upload_mbps` landed on the "100" the prose calls
+#: DOWNLOAD, and the real upload figure was never spanned at all. Both guards asserted
+#: `value in text[span]`, and "100" is in "100", so both stayed green.
+_RawPlacement = tuple[str, str, str, str]
+
+
+def _format_with_spans(template: str, context: dict[str, str]) -> tuple[str, dict[str, tuple[int, int]]]:
+    """`template.format(**context)` plus the span each placeholder's value occupies in the result.
+
+    Built during formatting rather than searched for afterwards: the renderer already knows exactly
+    where it wrote each value, so nothing needs to be recovered by string search. A placeholder used
+    more than once (`{name}` appears five times in `device_manual_a.txt`) records its FIRST
+    occurrence, which is the one the placement refers to.
+    """
+    out: list[str] = []
+    spans: dict[str, tuple[int, int]] = {}
+    position = 0
+    for literal, field, _spec, _conversion in string.Formatter().parse(template):
+        out.append(literal)
+        position += len(literal)
+        if field is None:
+            continue
+        if field not in context:
+            raise KeyError(field)
+        value = str(context[field])
+        spans.setdefault(field, (position, position + len(value)))
+        out.append(value)
+        position += len(value)
+    return "".join(out), spans
+
+
+def _discover_variants(templates_dir: Path) -> dict[str, tuple[str, ...]]:
+    """doc_type -> the template variant suffixes actually on disk, read from the template directory
+    itself rather than a hand kept table. `corpus/templates/<doc_type>_<variant>.txt` is already the
+    naming contract every template follows, so the directory listing IS the mapping; the table this
+    replaced had to be edited in lockstep with every added or removed template file, and a variant
+    added to one but not the other failed at render time with a KeyError or was silently never
+    picked. Sorted so `rng.choice` sees a stable candidate order (determinism: the same seed and the
+    same template set must always pick the same variant).
+    """
+    variants: dict[str, list[str]] = {}
+    for path in sorted(templates_dir.glob("*.txt")):
+        doc_type, _, variant = path.stem.rpartition("_")
+        if not doc_type or not variant:
+            raise RegistryError(f"template {path.name} does not follow the <doc_type>_<variant>.txt contract")
+        variants.setdefault(doc_type, []).append(variant)
+    if not variants:
+        raise RegistryError(f"no templates found under {templates_dir}")
+    return {doc_type: tuple(sorted(vs)) for doc_type, vs in sorted(variants.items())}
 
 
 @dataclass(frozen=True)
@@ -73,12 +123,12 @@ class RenderedDoc:
 def _load_templates(templates_dir: Path) -> dict[str, str]:
     return {
         f"{doc_type}_{variant}": (templates_dir / f"{doc_type}_{variant}.txt").read_text()
-        for doc_type, variants in _VARIANTS.items()
+        for doc_type, variants in _discover_variants(templates_dir).items()
         for variant in variants
     }
 
 
-def _contract_clause(entity_id: str, fields: dict) -> tuple[str, list[tuple[str, str, str]]]:
+def _contract_clause(entity_id: str, fields: dict) -> tuple[str, list[_RawPlacement]]:
     # contract_months is an int in the registry YAML; the comparison MUST cast to str, or every
     # zero contract plan takes the wrong branch and the cold open (plan-fiber-100's current page
     # vs contract_term-daniel-2025, which supersedes it) silently breaks. The placement is
@@ -97,20 +147,20 @@ def _contract_clause(entity_id: str, fields: dict) -> tuple[str, list[tuple[str,
     value = str(contract_months)
     if value != "0":
         clause = f"This plan runs on a {contract_months} month contract."
-        return clause, [(f"{entity_id}:contract_months", value, value)]
+        return clause, [(f"{entity_id}:contract_months", value, "contract_clause", value)]
     clause = "No contract. Cancel any time."
-    return clause, [(f"{entity_id}:contract_months", value, clause)]
+    return clause, [(f"{entity_id}:contract_months", value, "contract_clause", clause)]
 
 
-def _region_clause(entity_id: str, fields: dict) -> tuple[str, list[tuple[str, str, str]]]:
+def _region_clause(entity_id: str, fields: dict) -> tuple[str, list[_RawPlacement]]:
     region = fields.get("region")
     if region is None:
         return "", []
     value = str(region)
-    return f" in the {region} region", [(f"{entity_id}:region", value, value)]
+    return f" in the {region} region", [(f"{entity_id}:region", value, "region_clause", value)]
 
 
-def _plan_context(plan: Entity) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _plan_context(plan: Entity) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = plan.fields
     contract_text, contract_placements = _contract_clause(plan.id, fields)
     region_text, region_placements = _region_clause(plan.id, fields)
@@ -119,10 +169,10 @@ def _plan_context(plan: Entity) -> tuple[dict[str, str], list[tuple[str, str, st
     upload_mbps = str(fields["upload_mbps"])
     monthly_price = str(fields["monthly_price"])
     placements = [
-        (f"{plan.id}:name", name, name),
-        (f"{plan.id}:download_mbps", download_mbps, download_mbps),
-        (f"{plan.id}:upload_mbps", upload_mbps, upload_mbps),
-        (f"{plan.id}:monthly_price", monthly_price, monthly_price),
+        (f"{plan.id}:name", name, "plan_name", name),
+        (f"{plan.id}:download_mbps", download_mbps, "download_mbps", download_mbps),
+        (f"{plan.id}:upload_mbps", upload_mbps, "upload_mbps", upload_mbps),
+        (f"{plan.id}:monthly_price", monthly_price, "monthly_price", monthly_price),
         *contract_placements,
         *region_placements,
     ]
@@ -137,7 +187,7 @@ def _plan_context(plan: Entity) -> tuple[dict[str, str], list[tuple[str, str, st
     return context, placements
 
 
-def _contract_term_context(term: Entity, reg: Registry) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _contract_term_context(term: Entity, reg: Registry) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = term.fields
     fee = reg.entity("fee-early-termination")
     name = fields["name"]
@@ -146,11 +196,11 @@ def _contract_term_context(term: Entity, reg: Registry) -> tuple[dict[str, str],
     vintage_year = fields["vintage_year"]
     fee_amount = fee.fields["amount"]
     placements = [
-        (f"{term.id}:name", name, name),
-        (f"{term.id}:customer_name", customer_name, customer_name),
-        (f"{term.id}:contract_months", contract_months, contract_months),
-        (f"{term.id}:vintage_year", vintage_year, vintage_year),
-        (f"{fee.id}:amount", fee_amount, fee_amount),
+        (f"{term.id}:name", name, "name", name),
+        (f"{term.id}:customer_name", customer_name, "customer_name", customer_name),
+        (f"{term.id}:contract_months", contract_months, "contract_months", contract_months),
+        (f"{term.id}:vintage_year", vintage_year, "vintage_year", vintage_year),
+        (f"{fee.id}:amount", fee_amount, "termination_fee_amount", fee_amount),
     ]
     context = {
         "name": fields["name"],
@@ -162,15 +212,15 @@ def _contract_term_context(term: Entity, reg: Registry) -> tuple[dict[str, str],
     return context, placements
 
 
-def _device_manual_context(device: Entity) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _device_manual_context(device: Entity) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = device.fields
     name = fields["name"]
     device_type = fields["device_type"]
     firmware_version = fields["firmware_version"]
     placements = [
-        (f"{device.id}:name", name, name),
-        (f"{device.id}:device_type", device_type, device_type),
-        (f"{device.id}:firmware_version", firmware_version, firmware_version),
+        (f"{device.id}:name", name, "name", name),
+        (f"{device.id}:device_type", device_type, "device_type", device_type),
+        (f"{device.id}:firmware_version", firmware_version, "firmware_version", firmware_version),
     ]
     context = {
         "name": fields["name"],
@@ -180,7 +230,7 @@ def _device_manual_context(device: Entity) -> tuple[dict[str, str], list[tuple[s
     return context, placements
 
 
-def _troubleshooting_context(device: Entity, plan: Entity) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _troubleshooting_context(device: Entity, plan: Entity) -> tuple[dict[str, str], list[_RawPlacement]]:
     # Plan family members share the base plan's name field, so name/firmware alone made siblings
     # byte identical whenever the same a/b template got picked. monthly_price (and region, when
     # present) are the facts that actually differ per family member, so they carry the variation.
@@ -191,10 +241,10 @@ def _troubleshooting_context(device: Entity, plan: Entity) -> tuple[dict[str, st
     plan_name = plan.fields["name"]
     monthly_price = str(plan.fields["monthly_price"])
     placements = [
-        (f"{device.id}:name", name, name),
-        (f"{device.id}:firmware_version", firmware_version, firmware_version),
-        (f"{plan.id}:name", plan_name, plan_name),
-        (f"{plan.id}:monthly_price", monthly_price, monthly_price),
+        (f"{device.id}:name", name, "name", name),
+        (f"{device.id}:firmware_version", firmware_version, "firmware_version", firmware_version),
+        (f"{plan.id}:name", plan_name, "plan_name", plan_name),
+        (f"{plan.id}:monthly_price", monthly_price, "monthly_price", monthly_price),
         *region_placements,
     ]
     context = {
@@ -207,10 +257,10 @@ def _troubleshooting_context(device: Entity, plan: Entity) -> tuple[dict[str, st
     return context, placements
 
 
-def _policy_context(policy: Entity) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _policy_context(policy: Entity) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = policy.fields
     name = fields["name"]
-    placements = [(f"{policy.id}:name", name, name)]
+    placements: list[_RawPlacement] = [(f"{policy.id}:name", name, "name", name)]
     if "credit_per_hour" in fields:
         credit_per_hour = str(fields["credit_per_hour"])
         max_monthly_credit = str(fields["max_monthly_credit"])
@@ -219,8 +269,8 @@ def _policy_context(policy: Entity) -> tuple[dict[str, str], list[tuple[str, str
             f"outage, up to {max_monthly_credit} per month."
         )
         placements += [
-            (f"{policy.id}:credit_per_hour", credit_per_hour, credit_per_hour),
-            (f"{policy.id}:max_monthly_credit", max_monthly_credit, max_monthly_credit),
+            (f"{policy.id}:credit_per_hour", credit_per_hour, "policy_detail", credit_per_hour),
+            (f"{policy.id}:max_monthly_credit", max_monthly_credit, "policy_detail", max_monthly_credit),
         ]
     else:
         threshold_gb = str(fields["threshold_gb"])
@@ -230,14 +280,14 @@ def _policy_context(policy: Entity) -> tuple[dict[str, str], list[tuple[str, str
             f"{throttle_mbps} Mbps."
         )
         placements += [
-            (f"{policy.id}:threshold_gb", threshold_gb, threshold_gb),
-            (f"{policy.id}:throttle_mbps", throttle_mbps, throttle_mbps),
+            (f"{policy.id}:threshold_gb", threshold_gb, "policy_detail", threshold_gb),
+            (f"{policy.id}:throttle_mbps", throttle_mbps, "policy_detail", throttle_mbps),
         ]
     context = {"name": name, "policy_detail": detail}
     return context, placements
 
 
-def _fields_dump(entity_id: str, fields: dict) -> tuple[str, list[tuple[str, str, str]]]:
+def _fields_dump(entity_id: str, fields: dict) -> tuple[str, list[_RawPlacement]]:
     # Every field on the entity, sorted for determinism, each recorded as its own placement. Used
     # where the field set genuinely varies per instance (promotions, regions) so no field is ever
     # silently missed. The anchor equals the value: each field renders on its own "field: value"
@@ -245,11 +295,14 @@ def _fields_dump(entity_id: str, fields: dict) -> tuple[str, list[tuple[str, str
     # cursor in _render_doc walks fields_dump's own placements in the same order they appear in
     # the rendered text, correctly disambiguating any two fields that happen to share a value.
     lines = [f"{field}: {value}" for field, value in sorted(fields.items())]
-    placements = [(f"{entity_id}:{field}", str(value), str(value)) for field, value in sorted(fields.items())]
+    placements = [
+        (f"{entity_id}:{field}", str(value), "fields_dump", str(value))
+        for field, value in sorted(fields.items())
+    ]
     return "\n".join(lines), placements
 
 
-def _promo_context(promo: Entity, reg: Registry) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _promo_context(promo: Entity, reg: Registry) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = promo.fields
     try:
         plan_id = next(e.dst for e in reg.edges if e.relation == "applies_to" and e.src == promo.id)
@@ -278,11 +331,11 @@ def _promo_context(promo: Entity, reg: Registry) -> tuple[dict[str, str], list[t
         "waiver_clause": waiver,
         "fields_dump": dump_text,
     }
-    placements = [(f"{plan.id}:name", plan_name, plan_name), *dump_placements]
+    placements = [(f"{plan.id}:name", plan_name, "plan_name", plan_name), *dump_placements]
     return context, placements
 
 
-def _fee_schedule_context(region: Entity, reg: Registry) -> tuple[dict[str, str], list[tuple[str, str, str]]]:
+def _fee_schedule_context(region: Entity, reg: Registry) -> tuple[dict[str, str], list[_RawPlacement]]:
     fields = region.fields
     dump_text, dump_placements = _fields_dump(region.id, fields)
     if "equipment_rental_override_amount" in fields:
@@ -295,7 +348,9 @@ def _fee_schedule_context(region: Entity, reg: Registry) -> tuple[dict[str, str]
     # placement order to match text order to disambiguate fees that share an amount.
     fees = sorted((e for e in reg.by_kind("fee") if e.render), key=lambda e: e.id)
     fee_lines = [f"{fee.fields['name']}: {fee.fields['amount']}" for fee in fees]
-    fee_placements = [(f"{fee.id}:amount", str(fee.fields["amount"]), str(fee.fields["amount"])) for fee in fees]
+    fee_placements = [
+        (f"{fee.id}:amount", str(fee.fields["amount"]), "fee_list", str(fee.fields["amount"])) for fee in fees
+    ]
     context = {
         "name": fields["name"],
         "override_line": override_line,
@@ -313,22 +368,38 @@ def _plan_family(reg: Registry, base_plan_id: str) -> tuple[Entity, ...]:
     return tuple(sorted(members, key=lambda e: e.id))
 
 
-def _locate_span(text: str, anchor: str, cursor: int, *, doc_id: str, fact_ref: str) -> tuple[int, int]:
-    # Search forward from cursor first: placements are supplied in roughly the order their
-    # anchors appear in the template, so this alone resolves same-valued neighbors correctly
-    # (e.g. a symmetric plan's download_mbps and upload_mbps both being "100" finds the first
-    # "100" for download, then advances past it before upload_mbps searches for the second).
-    # Anchors that render earlier than the current cursor (a prose clause hoisted to the top of
-    # a template variant while its context key is late in placement order) fall back to a full
-    # document search rather than a whole text re-search per placement being the default: a
-    # cursor-scoped find is still the primary lookup, this is only a retry when it comes up
-    # empty, and it costs nothing extra for the common case where the primary search succeeds.
-    idx = text.find(anchor, cursor)
+def _locate_span(
+    text: str,
+    anchor: str,
+    key_span: tuple[int, int],
+    cursor: int,
+    *,
+    doc_id: str,
+    fact_ref: str,
+) -> tuple[int, int]:
+    """Locate `anchor` inside ONE placeholder's own rendered region, never the whole document.
+
+    `key_span` is where `_format_with_spans` actually wrote that placeholder's value, so a fact can
+    only ever be attributed to text the renderer produced for it. `cursor` disambiguates the several
+    placements that share one placeholder (`fields_dump` and `fee_list` each render a whole block of
+    `field: value` lines, built from the same sorted iteration as their placements, so placement
+    order matches text order); it is clamped into the region rather than carried across the document.
+
+    The unscoped `text.find(anchor, cursor)` this replaced could resolve a fact onto any earlier
+    value that happened to contain the same substring. See `_RawPlacement`.
+    """
+    key_start, key_end = key_span
+    region = text[key_start:key_end]
+    offset = max(0, min(cursor - key_start, len(region)))
+    idx = region.find(anchor, offset)
     if idx == -1:
-        idx = text.find(anchor)
+        idx = region.find(anchor)
     if idx == -1:
-        raise ValueError(f"{doc_id}: could not locate rendered span for {fact_ref} (anchor {anchor!r})")
-    return idx, idx + len(anchor)
+        raise ValueError(
+            f"{doc_id}: {fact_ref} (anchor {anchor!r}) does not appear in the text rendered for its "
+            f"template placeholder ({region!r})"
+        )
+    return key_start + idx, key_start + idx + len(anchor)
 
 
 def _render_doc(
@@ -337,17 +408,28 @@ def _render_doc(
     templates: dict[str, str],
     seed_key: str,
     context: dict[str, str],
-    raw_placements: list[tuple[str, str, str]],
+    raw_placements: list[_RawPlacement],
 ) -> RenderedDoc:
     rng = random.Random(seed_key)
-    variant = rng.choice(_VARIANTS[doc_type])
-    text = templates[f"{doc_type}_{variant}"].format(**context)
+    # The candidate variants come from the templates already loaded for this run, not a separate
+    # table: `templates` is keyed `<doc_type>_<variant>`, so its own keys are the mapping. Sorted
+    # for determinism (the same seed and the same template set must always pick the same variant).
+    variant = rng.choice(sorted(k.partition(f"{doc_type}_")[2] for k in templates if k.startswith(f"{doc_type}_")))
+    text, key_spans = _format_with_spans(templates[f"{doc_type}_{variant}"], context)
     placements: list[Placement] = []
-    cursor = 0
-    for fact_ref, value, anchor in raw_placements:
-        span = _locate_span(text, anchor, cursor, doc_id=doc_id, fact_ref=fact_ref)
+    cursors: dict[str, int] = {}
+    for fact_ref, value, context_key, anchor in raw_placements:
+        if context_key not in key_spans:
+            raise ValueError(
+                f"{doc_id}: {fact_ref} names template placeholder {{{context_key}}}, which the "
+                f"{doc_type}_{variant} template does not use"
+            )
+        key_span = key_spans[context_key]
+        span = _locate_span(
+            text, anchor, key_span, cursors.get(context_key, key_span[0]), doc_id=doc_id, fact_ref=fact_ref
+        )
         placements.append(Placement(fact_ref=fact_ref, value=value, span=span))
-        cursor = span[1]
+        cursors[context_key] = span[1]
     return RenderedDoc(doc_id=doc_id, doc_type=doc_type, text=text, placements=tuple(placements))
 
 

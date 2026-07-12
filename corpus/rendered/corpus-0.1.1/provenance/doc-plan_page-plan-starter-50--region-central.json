@@ -1,0 +1,55 @@
+{
+  "doc_id": "doc-plan_page-plan-starter-50--region-central",
+  "doc_type": "plan_page",
+  "placements": [
+    {
+      "fact_ref": "plan-starter-50--region-central:name",
+      "span": [
+        161,
+        171
+      ],
+      "value": "Starter 50"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:download_mbps",
+      "span": [
+        238,
+        240
+      ],
+      "value": "50"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:upload_mbps",
+      "span": [
+        259,
+        261
+      ],
+      "value": "50"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:monthly_price",
+      "span": [
+        278,
+        283
+      ],
+      "value": "21.99"
+    },
+    {
+      "clause": "No contract. Cancel any time.",
+      "fact_ref": "plan-starter-50--region-central:contract_months",
+      "span": [
+        19,
+        48
+      ],
+      "value": "0"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:region",
+      "span": [
+        301,
+        315
+      ],
+      "value": "region-central"
+    }
+  ]
+}

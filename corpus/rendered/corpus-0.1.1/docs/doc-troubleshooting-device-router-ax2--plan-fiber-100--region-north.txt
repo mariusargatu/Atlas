@@ -3,7 +3,7 @@
 Customers using the Router AX2 on the Fiber 100 plan should follow this
 guide if connectivity issues occur.
 
-Applies to Fiber 100 at 33.99 per month in the region-north region.
+Applies to Fiber 100 at 26.99 per month in the region-north region.
 
 Step 1: verify firmware version 1.4.2 is installed on the
 Router AX2.

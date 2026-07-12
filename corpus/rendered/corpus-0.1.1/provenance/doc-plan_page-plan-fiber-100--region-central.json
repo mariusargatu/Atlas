@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-100--region-central:download_mbps",
       "span": [
-        34,
-        37
+        48,
+        51
       ],
       "value": "100"
     },
     {
       "fact_ref": "plan-fiber-100--region-central:upload_mbps",
       "span": [
-        48,
-        51
+        70,
+        73
       ],
       "value": "100"
     },

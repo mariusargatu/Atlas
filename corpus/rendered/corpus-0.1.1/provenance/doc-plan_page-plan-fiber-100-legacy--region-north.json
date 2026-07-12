@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-100-legacy--region-north:download_mbps",
       "span": [
-        222,
-        225
+        259,
+        262
       ],
       "value": "100"
     },
     {
       "fact_ref": "plan-fiber-100-legacy--region-north:upload_mbps",
       "span": [
-        259,
-        262
+        281,
+        284
       ],
       "value": "100"
     },
@@ -32,7 +32,7 @@
         301,
         306
       ],
-      "value": "21.99"
+      "value": "23.99"
     },
     {
       "fact_ref": "plan-fiber-100-legacy--region-north:contract_months",

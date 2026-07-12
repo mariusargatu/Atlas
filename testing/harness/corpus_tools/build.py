@@ -45,9 +45,7 @@ def build_corpus(corpus_version: str, out_root: Path, seed: int) -> Path:
     with tempfile.TemporaryDirectory(dir=out_root) as tmp_dir:
         tmp_root = Path(tmp_dir)
 
-        db_path = tmp_root / "registry.sqlite"
-        reg_compile.compile_registry(reg, db_path)
-        integrity_violations = reg_compile.integrity_report(db_path)
+        integrity_violations = reg_compile.integrity_report(reg)
 
         # Gate BEFORE render_corpus even runs: a registry integrity violation (e.g. an edgeless
         # promotion) is a fact authoring error the compiler can name precisely. Rendering it

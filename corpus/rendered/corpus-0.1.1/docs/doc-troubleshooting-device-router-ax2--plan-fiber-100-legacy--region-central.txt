@@ -3,7 +3,7 @@
 Customers using the Router AX2 on the Fiber 100 Legacy plan should follow this
 guide if connectivity issues occur.
 
-Applies to Fiber 100 Legacy at 28.99 per month in the region-coast region.
+Applies to Fiber 100 Legacy at 28.99 per month in the region-central region.
 
 Step 1: verify firmware version 1.4.2 is installed on the
 Router AX2.

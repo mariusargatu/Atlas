@@ -5,9 +5,9 @@ edges:
 - dst: region-north
   relation: available_in
   src: plan-fiber-100--region-north
-- dst: region-coast
+- dst: region-central
   relation: available_in
-  src: plan-fiber-100-legacy--region-coast
+  src: plan-fiber-100-legacy--region-central
 - dst: region-north
   relation: available_in
   src: plan-fiber-100-legacy--region-north
@@ -20,12 +20,12 @@ edges:
 - dst: region-north
   relation: available_in
   src: plan-fiber-500--region-north
+- dst: region-central
+  relation: available_in
+  src: plan-starter-50--region-central
 - dst: region-coast
   relation: available_in
   src: plan-starter-50--region-coast
-- dst: region-north
-  relation: available_in
-  src: plan-starter-50--region-north
 entities:
 - fields:
     contract_months: 0
@@ -43,7 +43,7 @@ entities:
 - fields:
     contract_months: 0
     download_mbps: '100'
-    monthly_price: '33.99'
+    monthly_price: '26.99'
     name: Fiber 100
     page_status: current
     region: region-north
@@ -59,18 +59,18 @@ entities:
     monthly_price: '28.99'
     name: Fiber 100 Legacy
     page_status: superseded
-    region: region-coast
+    region: region-central
     technology: fiber
     upload_mbps: '100'
     variant_of: plan-fiber-100-legacy
     vintage_year: '2025'
-  id: plan-fiber-100-legacy--region-coast
+  id: plan-fiber-100-legacy--region-central
   kind: plan
   render: true
 - fields:
     contract_months: 12
     download_mbps: '100'
-    monthly_price: '21.99'
+    monthly_price: '23.99'
     name: Fiber 100 Legacy
     page_status: superseded
     region: region-north
@@ -84,7 +84,7 @@ entities:
 - fields:
     contract_months: 0
     download_mbps: '500'
-    monthly_price: '43.99'
+    monthly_price: '41.99'
     name: Fiber 500
     region: region-central
     technology: fiber
@@ -96,7 +96,7 @@ entities:
 - fields:
     contract_months: 0
     download_mbps: '500'
-    monthly_price: '36.99'
+    monthly_price: '43.99'
     name: Fiber 500
     region: region-coast
     technology: fiber
@@ -108,7 +108,7 @@ entities:
 - fields:
     contract_months: 0
     download_mbps: '500'
-    monthly_price: '38.99'
+    monthly_price: '36.99'
     name: Fiber 500
     region: region-north
     technology: fiber
@@ -120,24 +120,24 @@ entities:
 - fields:
     contract_months: 0
     download_mbps: '50'
-    monthly_price: '23.99'
+    monthly_price: '21.99'
+    name: Starter 50
+    region: region-central
+    technology: fiber
+    upload_mbps: '50'
+    variant_of: plan-starter-50
+  id: plan-starter-50--region-central
+  kind: plan
+  render: true
+- fields:
+    contract_months: 0
+    download_mbps: '50'
+    monthly_price: '16.99'
     name: Starter 50
     region: region-coast
     technology: fiber
     upload_mbps: '50'
     variant_of: plan-starter-50
   id: plan-starter-50--region-coast
-  kind: plan
-  render: true
-- fields:
-    contract_months: 0
-    download_mbps: '50'
-    monthly_price: '18.99'
-    name: Starter 50
-    region: region-north
-    technology: fiber
-    upload_mbps: '50'
-    variant_of: plan-starter-50
-  id: plan-starter-50--region-north
   kind: plan
   render: true

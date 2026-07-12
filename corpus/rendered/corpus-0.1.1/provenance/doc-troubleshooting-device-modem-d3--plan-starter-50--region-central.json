@@ -1,0 +1,46 @@
+{
+  "doc_id": "doc-troubleshooting-device-modem-d3--plan-starter-50--region-central",
+  "doc_type": "troubleshooting",
+  "placements": [
+    {
+      "fact_ref": "device-modem-d3:name",
+      "span": [
+        2,
+        10
+      ],
+      "value": "Modem D3"
+    },
+    {
+      "fact_ref": "device-modem-d3:firmware_version",
+      "span": [
+        259,
+        264
+      ],
+      "value": "3.2.1"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:name",
+      "span": [
+        83,
+        93
+      ],
+      "value": "Starter 50"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:monthly_price",
+      "span": [
+        180,
+        185
+      ],
+      "value": "21.99"
+    },
+    {
+      "fact_ref": "plan-starter-50--region-central:region",
+      "span": [
+        203,
+        217
+      ],
+      "value": "region-central"
+    }
+  ]
+}

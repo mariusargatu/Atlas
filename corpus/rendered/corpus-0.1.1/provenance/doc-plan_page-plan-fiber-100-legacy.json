@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-100-legacy:download_mbps",
       "span": [
-        41,
-        44
+        62,
+        65
       ],
       "value": "100"
     },
     {
       "fact_ref": "plan-fiber-100-legacy:upload_mbps",
       "span": [
-        62,
-        65
+        84,
+        87
       ],
       "value": "100"
     },

@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-500:download_mbps",
       "span": [
-        206,
-        209
+        236,
+        239
       ],
       "value": "500"
     },
     {
       "fact_ref": "plan-fiber-500:upload_mbps",
       "span": [
-        236,
-        239
+        258,
+        261
       ],
       "value": "500"
     },

@@ -22,11 +22,11 @@ verification (`_verify_fingerprint`, a live TEI `/info` call) and its own `_embe
 hardwired to TEI's specific HTTP contract (`POST /embed`, `{"inputs": [...]}`), never a pluggable
 `EmbeddingClient` -- confirmed by reading that adapter's source (SP9's own planning digest names the
 embedding client port as new territory `PgvectorRetriever` was never updated to consume). A second,
-genuinely different embedder therefore needs its own thin search path; duplicating the small
-vector-arm/tsv-arm/hydrate SQL here (rather than importing `PgvectorRetriever`'s own private,
-underscore-named module constants) is the SAME deliberate-duplication call that adapter's own module
-docstring already makes for the identical reason ("the fingerprint read ... duplicate[s] a few
-lines ... rather than importing them; the duplication is deliberate, not an oversight").
+genuinely different embedder therefore needs its own thin search path, but NOT its own copy of the
+SQL: the vector arm, the tsv arm, the hydrate projection and `row_to_chunk` are imported from
+`atlas.adapters.pgvector_retriever` (public there for exactly this reason), so the two search paths
+can never drift in table, column, `index_build_id` scoping or `, chunk_id` tie break. Only the
+embed call and the absence of a rerank stage differ, which is the whole point of this class.
 
 Neither adapter retries or trips a circuit breaker (`atlas.adapters.resilience`'s job for the served
 retrieval path): both back a live/operator BENCHMARK run, never the served runtime graph, so a
@@ -35,14 +35,19 @@ customer turn must. A documented, scoped simplification, not an oversight.
 """
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Sequence
 from dataclasses import replace as _dc_replace
 from typing import Any, Optional
 
 import httpx
 
-from atlas.domain.retrieval import rrf_fuse
+from atlas.adapters.pgvector_retriever import (
+    HYDRATE_SQL,
+    TSV_ARM_SQL,
+    VECTOR_ARM_SQL,
+    row_to_chunk,
+)
+from atlas.domain.retrieval import RRF_K, l2_normalize, rrf_fuse, vector_literal
 from atlas.ports.embedding import EmbeddingClient
 from atlas.ports.knowledge import Chunk
 
@@ -88,58 +93,6 @@ class TeiReranker:
             self._client.close()
 
 
-# The vector/tsv arms and the hydrate projection are IDENTICAL, by table and column, to
-# `atlas.adapters.pgvector_retriever`'s own private `_VECTOR_ARM_SQL`/`_TSV_ARM_SQL`/`_HYDRATE_SQL`
-# (same `chunks` table, same `index_build_id` scoping discipline, same `, chunk_id` tie break -- see
-# that module's own docstring on the deterministic tie break a live probe against this corpus
-# needed). Restated here, not imported, per this module's own docstring.
-_VECTOR_ARM_SQL = """
-    SELECT chunk_id
-    FROM chunks
-    WHERE index_build_id = %(build_id)s
-    ORDER BY embedding <=> %(vector)s::vector ASC, chunk_id
-    LIMIT %(k)s;
-"""
-
-_TSV_ARM_SQL = """
-    SELECT chunk_id
-    FROM chunks
-    WHERE index_build_id = %(build_id)s AND tsv @@ websearch_to_tsquery('english', %(query)s)
-    ORDER BY ts_rank(tsv, websearch_to_tsquery('english', %(query)s)) DESC, chunk_id
-    LIMIT %(k)s;
-"""
-
-_HYDRATE_SQL = """
-    SELECT chunk_id, parent_id, doc_id, doc_version, doc_type, heading_path,
-           char_span_start, char_span_end, text, entity_ids
-    FROM chunks
-    WHERE chunk_id = ANY(%(chunk_ids)s);
-"""
-
-
-def _l2_normalize(vector: Sequence[float]) -> list[float]:
-    norm = math.sqrt(sum(component * component for component in vector))
-    if norm == 0.0:
-        return list(vector)
-    return [component / norm for component in vector]
-
-
-def _vector_literal(values: Sequence[float]) -> str:
-    return "[" + ",".join(repr(float(v)) for v in values) + "]"
-
-
-def _row_to_chunk(row: Sequence[Any]) -> Chunk:
-    (
-        chunk_id, parent_id, doc_id, doc_version, doc_type, heading_path,
-        char_span_start, char_span_end, text, entity_ids,
-    ) = row
-    return Chunk(
-        chunk_id=chunk_id, parent_id=parent_id, doc_id=doc_id, doc_version=doc_version, doc_type=doc_type,
-        heading_path=tuple(heading_path), char_span=(char_span_start, char_span_end), text=text,
-        entity_ids=tuple(entity_ids), score=0.0,  # filled in below from the fused RRF score
-    )
-
-
 class OpenAiEmbeddedRetriever:
     """A minimal hybrid (vector + tsvector, RRF fused) search over the `chunks` table, scoped to
     one `index_build_id`, bound to an injectable `EmbeddingClient` (a real `OpenAiEmbeddingClient`
@@ -158,7 +111,7 @@ class OpenAiEmbeddedRetriever:
         connect: Callable[[], Any],
         normalize: bool = True,
         query_prefix: str = "",
-        rrf_k: int = 60,
+        rrf_k: int = RRF_K,
     ) -> None:
         self._embedding_client = embedding_client
         self._build_id = index_build_id
@@ -170,23 +123,23 @@ class OpenAiEmbeddedRetriever:
     def _embed_query(self, query: str) -> list[float]:
         text = f"{self._query_prefix}{query}" if self._query_prefix else query
         [vector] = self._embedding_client.embed_texts([text])
-        return _l2_normalize(vector) if self._normalize else list(vector)
+        return l2_normalize(vector) if self._normalize else list(vector)
 
     def search_chunks(self, query: str, k: int) -> list[Chunk]:
         vector = self._embed_query(query)
         conn = self._connect()
         try:
             with conn.cursor() as cur:
-                cur.execute(_VECTOR_ARM_SQL, {"vector": _vector_literal(vector), "k": k, "build_id": self._build_id})
+                cur.execute(VECTOR_ARM_SQL, {"vector": vector_literal(vector), "k": k, "build_id": self._build_id})
                 vector_ids = [row[0] for row in cur.fetchall()]
-                cur.execute(_TSV_ARM_SQL, {"query": query, "k": k, "build_id": self._build_id})
+                cur.execute(TSV_ARM_SQL, {"query": query, "k": k, "build_id": self._build_id})
                 tsv_ids = [row[0] for row in cur.fetchall()]
                 fused = rrf_fuse([tuple(vector_ids), tuple(tsv_ids)], k=self._rrf_k)[:k]
                 if not fused:
                     conn.commit()
                     return []
-                cur.execute(_HYDRATE_SQL, {"chunk_ids": [chunk_id for chunk_id, _ in fused]})
-                rows_by_id = {row[0]: _row_to_chunk(row) for row in cur.fetchall()}
+                cur.execute(HYDRATE_SQL, {"chunk_ids": [chunk_id for chunk_id, _ in fused]})
+                rows_by_id = {row[0]: row_to_chunk(row) for row in cur.fetchall()}
             conn.commit()
             return [
                 _dc_replace(rows_by_id[chunk_id], score=score)

@@ -3,7 +3,7 @@
 Customers using the Router BE1 on the Fiber 500 plan should follow this
 guide if connectivity issues occur.
 
-Applies to Fiber 500 at 43.99 per month in the region-central region.
+Applies to Fiber 500 at 41.99 per month in the region-central region.
 
 Step 1: verify firmware version 1.0.1 is installed on the
 Router BE1.

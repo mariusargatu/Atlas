@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-starter-50:download_mbps",
       "span": [
-        209,
-        211
+        238,
+        240
       ],
       "value": "50"
     },
     {
       "fact_ref": "plan-starter-50:upload_mbps",
       "span": [
-        238,
-        240
+        259,
+        261
       ],
       "value": "50"
     },

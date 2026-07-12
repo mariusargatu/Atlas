@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-fiber-100--region-north:download_mbps",
       "span": [
-        206,
-        209
+        236,
+        239
       ],
       "value": "100"
     },
     {
       "fact_ref": "plan-fiber-100--region-north:upload_mbps",
       "span": [
-        236,
-        239
+        258,
+        261
       ],
       "value": "100"
     },
@@ -32,7 +32,7 @@
         278,
         283
       ],
-      "value": "33.99"
+      "value": "26.99"
     },
     {
       "clause": "No contract. Cancel any time.",

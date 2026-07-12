@@ -79,7 +79,9 @@ def run_embedder_stage(
     candidates are actually CACHED per case. The two are deliberately separate: stage 2's own depth
     sweep (`{20, 50, 100}`) needs a candidate pool at least as wide as its widest depth to sweep
     over at all, while stage 1's own reported metric stays at whatever `k` the caller actually wants
-    scored (e.g. `k=5`, the production `DEPLOYED_K`). A caller with no stage 2 (or a hermetic test
+    scored (e.g. the production width, `atlas.domain.retrieval.K_FINAL` -- single sourced there
+    rather than restated as a literal here, the exact drift this docstring used to cause when it
+    said "k=5" while the real deployed width was 3). A caller with no stage 2 (or a hermetic test
     with no need for headroom) simply omits `pool_size` and gets the prior, single-`k` behaviour.
 
     Content hash cached per component at `{"stage": "embedder", "k": k, "pool_size": pool_size}`: a

@@ -34,9 +34,34 @@ FORBIDDEN_ATLAS_PREFIXES = ("atlas.orchestration", "atlas.adapters", "atlas.mcp_
 
 # The seam between the two harnesses (property 5): the agent harness is the product and must
 # never import the eval harness. The eval harness reads the agent through its ports, and the
-# dependency is one way. A backend import of `evals` (the lane package: evalkit/drift/inference_oracle) or any
-# `testing.*` would wire the test rig into the runtime, the conflation this boundary guards against.
-FORBIDDEN_EVAL_TOPLEVEL = ("evals", "evalkit", "drift", "inference_oracle", "testing")
+# dependency is one way. A backend import of any harness package would wire the test rig into the
+# runtime, the conflation this boundary guards against.
+#
+# Derived from the harness tree itself (`_harness_packages`), never a hand kept list. The list this
+# replaced named five modules, three of which (`evalkit`, `drift`, `inference_oracle`) are
+# subpackages of `evals/`, so `module.split(".")[0]` was always `evals` and they could never match;
+# meanwhile every OTHER top level harness package (`rag_tools`, `corpus_tools`, `quality`, `matrix`,
+# ...) was unguarded, which is exactly the direction three adapter docstrings cite this rule to
+# justify duplicating code against.
+#
+# `SHARED_HARNESS_PACKAGES` is the explicit, small allowlist of harness packages the product
+# legitimately depends on: determinism sources/canonicalisation, the replay gateway, the tracer
+# protocol, and contract loading. These are shared machinery, not the eval rig. Anything else under
+# `testing/harness/` is forbidden to `backend/atlas`; add to this set deliberately, never by
+# accident.
+SHARED_HARNESS_PACKAGES = frozenset({"contract_tools", "determinism", "replay", "tracing"})
+
+
+def _harness_packages() -> frozenset[str]:
+    """Every importable top level package under `testing/harness/` (the directories carrying an
+    `__init__.py`, which is what `PYTHONPATH=testing/harness` actually exposes)."""
+    harness = ROOT / "testing/harness"
+    return frozenset(p.name for p in harness.iterdir() if p.is_dir() and (p / "__init__.py").is_file())
+
+
+# `testing` itself is added on top of the derived set: `testing.tests` is importable under
+# `PYTHONPATH=.` and is never shared machinery.
+FORBIDDEN_EVAL_TOPLEVEL = (_harness_packages() - SHARED_HARNESS_PACKAGES) | {"testing"}
 
 
 def _resolve_relative(path: pathlib.Path, level: int, module: str | None) -> str:
@@ -114,6 +139,30 @@ def test_agent_harness_never_imports_the_eval_harness():
             if module.split(".")[0] in FORBIDDEN_EVAL_TOPLEVEL:
                 violations.append(f"{path.relative_to(ROOT)}:{lineno} imports {module}")
     assert not violations, "agent harness leaked an eval-harness import:\n" + "\n".join(violations)
+
+
+def test_the_harness_seam_covers_every_harness_package_it_does_not_allowlist():
+    """The gate above is only as good as the set it matches against. This pins the derivation
+    itself: every top level package under `testing/harness/` is either forbidden to the backend or
+    named in `SHARED_HARNESS_PACKAGES`, with nothing falling through the gap. The hand kept tuple
+    this replaced left `rag_tools`, `corpus_tools`, `quality`, `matrix` and eight more unguarded
+    while three adapter docstrings cited the rule as the reason they duplicate code."""
+    packages = _harness_packages()
+    assert "rag_tools" in FORBIDDEN_EVAL_TOPLEVEL, "the seam must cover rag_tools (it did not before)"
+    assert "corpus_tools" in FORBIDDEN_EVAL_TOPLEVEL
+    assert SHARED_HARNESS_PACKAGES <= packages, "an allowlisted package no longer exists in the harness"
+    assert packages <= (FORBIDDEN_EVAL_TOPLEVEL | SHARED_HARNESS_PACKAGES), "a harness package is unguarded"
+
+
+def test_the_allowlist_names_only_packages_the_backend_actually_imports():
+    """An allowlist that outlives its need is a hole. Every name in `SHARED_HARNESS_PACKAGES` must
+    be justified by a real backend import; drop one that no longer is."""
+    imported = set()
+    for path in _backend_files():
+        for module, _ in _imports(path):
+            imported.add(module.split(".")[0])
+    unused = SHARED_HARNESS_PACKAGES - imported
+    assert not unused, f"allowlisted but never imported by the backend, so drop it: {sorted(unused)}"
 
 
 def test_relative_imports_resolve_to_absolute_so_the_layers_are_not_evaded():

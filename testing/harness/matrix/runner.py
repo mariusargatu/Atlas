@@ -2,10 +2,17 @@
 generators (stage 3), staged per D17, never a cross product on the expensive (LLM backed) axis.
 Assembles one run manifest (every cell's own D26 lineage row, `matrix.lineage.build_manifest_row`)
 plus HELM style per query result files, wired to `quality.stats` (via `matrix.compare`, holm
-corrected paired deltas with 95% CIs) and `quality.gate` (`gate_on_lower_bound` promotes the top
-retrieval config into stage 3, the "any matrix regression check routes through this gate" the
-planning digest names). `judge.panel.panel_vote` runs for real in stage 3 (`matrix.generators`),
-its first caller anywhere in this repo.
+corrected paired deltas with 95% CIs). `judge.panel.panel_vote` runs for real in stage 3
+(`matrix.generators`), its first caller anywhere in this repo.
+
+NO promotion gate: this runner used to call `quality.gate.gate_on_lower_bound` on the top config's
+nDCG CI with `threshold=0.0` and `variance_budget=1.0`. Over nDCG in [0, 1] a lower bound is always
+>= 0.0 and a width always <= 1.0, so that verdict was structurally incapable of being anything but
+PASS; nothing branched on it, no contract schema named it, and its one test asserted only that the
+verdict was one of the three legal values. Which config enters stage 3 is decided by
+`select_top_configs` (a real ranking), never by a gate. `quality.gate` is unchanged and still backs
+the places that do gate on a real threshold (`judge.calibration`, `judge.live_pr_lane`,
+`evals.benchmark.study`, `evals.evalkit.report`).
 
 Fully hermetic by construction: every embedder/reranker component is a deterministic, seeded fixture
 callable and every generator/judge call is a `replay.gateway.GatewayChatModel` pinned to REPLAY mode
@@ -45,7 +52,6 @@ from typing import Optional
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from quality import ir_metrics
-from quality.gate import GateDecision, gate_on_lower_bound
 from quality.retrieval_report import RetrievalReport
 
 from matrix.cache import MatrixCache
@@ -82,8 +88,6 @@ class MatrixRunConfig:
     seed: int = 20260721
     n_top_configs: int = 2
     reranker_depths: tuple[int, ...] = DEPTHS
-    gate_threshold: float = 0.0
-    gate_variance_budget: float = 1.0
 
 
 def _gen_key(config_id: str, generator_component_id: str) -> str:
@@ -100,14 +104,6 @@ def _embedder_id_for_config(config_id: str) -> str:
     return config_id.split("::", 1)[0]
 
 
-def _report_for_config(
-    config_id: str, embedder_cells: dict[str, EmbedderCell], reranker_cells: dict[str, RerankerCell]
-) -> RetrievalReport:
-    if config_id in embedder_cells:
-        return embedder_cells[config_id].report
-    return reranker_cells[config_id].report
-
-
 def _report_dict(report: RetrievalReport) -> dict:
     return {
         "n": report.n,
@@ -118,17 +114,6 @@ def _report_dict(report: RetrievalReport) -> dict:
         "mrr_ci": list(report.mrr_ci),
         "ndcg_at_k_ci": list(report.ndcg_at_k_ci),
         "detectable_effect_ndcg": report.detectable_effect_ndcg,
-    }
-
-
-def _gate_dict(decision: GateDecision) -> dict:
-    return {
-        "verdict": decision.verdict.value,
-        "reason": decision.reason,
-        "lower_bound": decision.lower_bound,
-        "width": decision.width,
-        "threshold": decision.threshold,
-        "variance_budget": decision.variance_budget,
     }
 
 
@@ -276,12 +261,9 @@ def run_matrix(
     if not top_configs:
         raise ValueError("run_matrix needs at least one retrieval config; embedders/rerankers produced none")
 
+    # The top ranked retrieval config is what stage 3's generator cells run against. `select_top_configs`
+    # IS the promotion decision; there is no separate gate verdict layered on top of it.
     primary = top_configs[0]
-    primary_report = _report_for_config(primary.config_id, embedder_cells, reranker_cells)
-    _, lo, hi = primary_report.ndcg_at_k_ci
-    promotion_gate = gate_on_lower_bound(
-        (lo, hi), threshold=config.gate_threshold, variance_budget=config.gate_variance_budget
-    )
 
     # SP9 task 5: the spend gate checks BEFORE a cell runs at all, never after. `gate` is rebound
     # (never mutated: SpendGate is immutable) as spend accrues, so a later cell sees an earlier
@@ -365,7 +347,7 @@ def run_matrix(
     manifest = _assemble_manifest(
         config=config, embedder_cells=embedder_cells, reranker_cells=reranker_cells,
         generation_cells=generation_cells, generators=generators, top_configs=[c.config_id for c in top_configs],
-        stage1_stats=stage1_stats, stage3_stats=stage3_stats, promotion_gate=promotion_gate,
+        stage1_stats=stage1_stats, stage3_stats=stage3_stats,
         off_diagonal=off_diagonal, judge_ids=judge_ids, dropped_cells=dropped_cells,
         variant_comparison=variant_rows,
     )
@@ -387,7 +369,6 @@ def _assemble_manifest(
     top_configs: list[str],
     stage1_stats,
     stage3_stats,
-    promotion_gate: GateDecision,
     off_diagonal: OffDiagonalCheck | None,
     judge_ids: Sequence[str],
     dropped_cells: Sequence[DroppedCell] = (),
@@ -410,7 +391,6 @@ def _assemble_manifest(
         "stages": {"embedders": embedder_rows, "rerankers": reranker_rows, "generators": generator_rows},
         "baseline_component_ids": sorted(BASELINE_COMPONENT_IDS),
         "top_configs": top_configs,
-        "promotion_gate": _gate_dict(promotion_gate),
         "stage1_stats": [delta_to_dict(d) for d in stage1_stats],
         "stage3_stats": [delta_to_dict(d) for d in stage3_stats],
         "off_diagonal": _off_diagonal_dict(off_diagonal) if off_diagonal is not None else None,

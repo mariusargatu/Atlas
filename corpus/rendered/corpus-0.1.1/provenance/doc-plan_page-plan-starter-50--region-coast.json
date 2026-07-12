@@ -13,16 +13,16 @@
     {
       "fact_ref": "plan-starter-50--region-coast:download_mbps",
       "span": [
-        37,
-        39
+        50,
+        52
       ],
       "value": "50"
     },
     {
       "fact_ref": "plan-starter-50--region-coast:upload_mbps",
       "span": [
-        50,
-        52
+        71,
+        73
       ],
       "value": "50"
     },
@@ -32,7 +32,7 @@
         90,
         95
       ],
-      "value": "23.99"
+      "value": "16.99"
     },
     {
       "clause": "No contract. Cancel any time.",
