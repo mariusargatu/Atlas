@@ -29,3 +29,27 @@ services:
       - backend
     ports:
       - "8080:80"
+
+  # Operator-only graph-RAG database (doc 07's Neo4j lane). Behind the `operator` profile so a plain
+  # `docker compose up` (the replay/E2E lane) NEVER starts it: `docker compose --profile operator up neo4j`.
+  # The hermetic gate uses the in-memory graph adapter instead; this is dev/prod / the operator eval lane.
+  neo4j:
+    image: neo4j:5.26 # LTS (supported to 2028); or neo4j:2026.01 for filterable vector indexes
+    profiles: ["operator"]
+    environment:
+      NEO4J_AUTH: neo4j/atlas-dev-password
+      NEO4J_PLUGINS: '["apoc"]' # only needed for SimpleKGPipeline entity resolution; native vector index needs no plugin
+    ports:
+      - "7474:7474" # HTTP browser
+      - "7687:7687" # Bolt
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s # JVM + store recovery warmup
+
+volumes:
+  neo4j-data:

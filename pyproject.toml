@@ -35,6 +35,23 @@ record = [
 ollama = [
     "langchain-ollama>=0.2",
 ]
+# RAG eval lane (doc 07, Option A): DeepEval's LLM-judged RAG metrics + synthetic generation, run by
+# an operator with a local Ollama judge. NON-gating; the hermetic PR lane installs none of this, so a
+# judged metric has no library to run and the deterministic IR/graph metrics are what gate.
+rageval = [
+    "deepeval==4.0.9",  # pinned: 4.0.8 was yanked. DeepEvalBaseLLM is the injectable-judge seam.
+]
+# Graph-RAG lane: a LIVE Neo4j behind the graph port. There is no in-process Cypher from Python, so
+# the in-memory adapter is the gate's graph and this is operator/dev-prod only.
+graph = [
+    "neo4j>=5.17,<7",
+    "neo4j-graphrag[experimental,ollama]>=1.18",
+    "testcontainers[neo4j]>=4.14",
+]
+# Read-surface red team (doc 07 -> the security article): live indirect-injection generation.
+redteam = [
+    "deepteam>=1.0",
+]
 
 # v0.1 uses a pythonpath layout (no install step) so the import lint layers stay physical.
 # A uv workspace replaces this when backend/atlas and harness become installable packages.
@@ -59,7 +76,15 @@ omit = [
     "testing/harness/evals/judge/__main__.py",            # judge calibration study (task judge), operator-run
     "testing/harness/evals/judge/live_calibration.py",    # LIVE judge probe (task judge-live), needs keys + egress
     "testing/harness/evals/benchmark/__main__.py",        # honest benchmark study (task benchmark), run by an operator
+    "testing/harness/evals/rageval/*",                    # DeepEval RAG lane (task rageval), LLM judge + keys, operator-run
+    "testing/harness/evals/graphrag/*",                   # graph-vs-vector study (task graph), operator-run
+    "testing/harness/evals/ragset/*",                     # synthetic set generation (task ragset), needs deepeval + Ollama
+    "testing/harness/evals/redteam/*",                    # red-team lane (task redteam), live attack generation
+    "testing/harness/evals/monitor/__main__.py",          # prod-monitoring sketch (task monitor); budget.py IS gated
+    "testing/harness/evals/mutation/__main__.py",          # live semantic-mutation lane (task mutation); mutants.py IS gated
+    "testing/harness/evals/metamorphic/*",                # metamorphic augmentation lane (task metamorphic); the frozen family IS gated
     "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
+    "backend/atlas/adapters/neo4j_graph.py",     # live Neo4j graph adapter, operator/dev-prod only (no in-process Cypher)
     "backend/atlas/ports/*",                     # Protocol definitions, signatures, not behaviour
 ]
 
