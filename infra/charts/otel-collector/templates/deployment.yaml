@@ -1,0 +1,51 @@
+{{- /* docker-compose.yml's own otel-collector service, translated 1:1 (same digest pinned image,
+same --config flag, same two mount points). No separate chown init Job unlike compose's own
+otel-archive-init (found live there: a freshly created named volume mounts root owned, and the
+collector's fixed non root UID 10001 cannot write into it) -- Kubernetes' own equivalent,
+`podSecurityContext.fsGroup`, group-owns the emptyDir volume at pod creation instead, so the
+collector can write the raw OTLP archive from its very first start with no separate init step.
+`replicas: 1`, no HA (this reference system's own consistent posture: CNPG `instances: 1`, TEI
+single replica, the same "no unnecessary HA" discipline D1 already established, applied here). */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.observability.otelCollector.image.repository }}@{{ .Values.observability.otelCollector.image.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          args:
+            - "--config=/etc/otelcol-contrib/otel-collector.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/otel-collector.yaml
+              subPath: otel-collector.yaml
+              readOnly: true
+            - name: raw-archive
+              mountPath: /var/log/otel
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+        - name: raw-archive
+          emptyDir: {}

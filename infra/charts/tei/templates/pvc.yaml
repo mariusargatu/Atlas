@@ -1,0 +1,18 @@
+{{- /* Only rendered in inCluster mode (see deployment.yaml's own comment). The HF cache PVC (mounted
+at /data), the k8s equivalent of docker-compose.yml's tei-embed-cache/tei-rerank-cache named volumes:
+dynamically provisioned off the cluster's default StorageClass (k3d/k3s ships "local-path" as the
+default, WaitForFirstConsumer binding, verified live), unlike infra/charts/atlas-indexes' PV/PVC pair
+which needs a STATIC hostPath binding to one specific node path instead. Makes every restart AFTER
+the first one warm, on tiers where TEI actually runs in cluster (burst's real amd64 nodes today). */ -}}
+{{- if eq .Values.tei.mode "inCluster" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tei-{{ .Values.role }}-cache
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.tei.cache.storage | quote }}
+{{- end }}

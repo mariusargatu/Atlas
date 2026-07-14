@@ -1,0 +1,50 @@
+{{- /* Translated from docker-compose.yml's checkpointer-migrate service: same backend image, same
+alembic invocation. compose hardcodes ATLAS_PG_DSN as a literal env var; here the password comes
+from a Secret, so the DSN is assembled in a shell wrapper instead of hardcoded, the only real
+translation choice (image, command, and idempotency guarantee are otherwise unchanged). */ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: atlas-checkpointer-migrate
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5" # runs before rag-init (weight 0); independent of it, ordering just for readable logs
+    # Fix round 1 (reviewer finding): "hook-succeeded" used to be in this policy too, which deleted
+    # the Job (and its Pod, and its logs) the moment it succeeded, leaving no debugging window on a
+    # normally successful run. "before-hook-creation" alone still guarantees a rerun deletes the OLD
+    # Job before creating a new one (Kubernetes' own Job spec is immutable on `helm upgrade`
+    # otherwise); ttlSecondsAfterFinished below is what now cleans up a successful Job, on a delay
+    # instead of instantly.
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  # Give a debugging window before Kubernetes' own TTL controller reaps a successful Job (and its
+  # Pod, and its logs); 600s (10 minutes) is plenty to `kubectl logs` a run right after `task k3d:up`
+  # without leaving completed Jobs around indefinitely.
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      name: atlas-checkpointer-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.images.backend.repository }}@{{ .Values.images.backend.digest }}"
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export ATLAS_PG_DSN="postgresql://${PGUSER}:${PGPASSWORD}@{{ .Values.postgres.host }}:5432/{{ .Values.postgres.database }}"
+              exec uv run --no-sync alembic -c backend/atlas/persistence/alembic.ini upgrade head
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: password

@@ -1,0 +1,24 @@
+# Defaults local to this chart; helmfile always supplies the real namespace/postgres host/backend
+# credentials Secret through environments/base + environments/{{ .Environment.Name }}.
+namespace: atlas
+credentialsSecretName: atlas-postgres-credentials
+
+postgres:
+  host: atlas-pg-rw # CNPG's auto created read write Service: "<clusterName>-rw", same namespace
+  database: atlas   # the EXISTING app database this Job connects to first, to CREATE "phoenix"
+
+# Mirrors the EXACT field path SP6 task 3 already parked in environments/base/values.yaml (never a
+# second, independently pinned digest for the same image -- see otel-collector/values.yaml's own
+# comment for the full reasoning, identical here).
+observability:
+  phoenix:
+    image:
+      repository: arizephoenix/phoenix
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# pgvector/pgvector, docker-compose.yml's own choice for the phoenix-db-init psql client (it already
+# has psql + is already pinned elsewhere in this repo, so no new image family for one `CREATE
+# DATABASE` check).
+dbInitImage:
+  repository: pgvector/pgvector
+  digest: "sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0"

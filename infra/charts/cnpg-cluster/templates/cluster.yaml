@@ -1,0 +1,49 @@
+{{- /* D1: one Postgres, instances=1, no pooler, HA explicitly refused (backup + bootstrap recovery
+is why the operator earns its place, not availability). imageCatalogRef takes precedence over any
+imageName, so the Cluster always runs the pgvector layered image from imagecatalog.yaml above, never
+a bare upstream CNPG image that lacks the extension. bootstrap.initdb creates database/owner "atlas"
+(compose parity: POSTGRES_USER=atlas, POSTGRES_DB=atlas) using credentialsSecretName's `username`/
+`password` keys (charts/scaffold's Secret, extended this task). */ -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.cnpg.clusterName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  instances: {{ .Values.cnpg.instances }}
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ImageCatalog
+    name: atlas-postgres-pgvector
+    major: 17
+  storage:
+    size: {{ .Values.cnpg.storageSize | quote }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.cnpg.database }}
+      owner: {{ .Values.cnpg.owner }}
+      secret:
+        name: {{ .Values.credentialsSecretName }}
+      # Live verification finding (Task 2): the "atlas" owner role CNPG creates is deliberately NOT
+      # a superuser (unlike compose's pgvector/pgvector image, where POSTGRES_USER=atlas IS the
+      # initdb superuser), so `CREATE EXTENSION IF NOT EXISTS vector;` at ingest time
+      # (testing/harness/rag_tools/ingest.py) fails closed with "must be superuser to create this
+      # extension" against a freshly bootstrapped CNPG cluster. postInitApplicationSQL runs as
+      # superuser in the application database right after bootstrap (CNPG's own documented
+      # mechanism for exactly this), so the extension already exists by the time rag-init's own
+      # idempotent `CREATE EXTENSION IF NOT EXISTS` runs (a no op then, not a failure).
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector;
+      # Live verification finding (SP6 task 5): the phoenix release's own db-init Job (infra/charts/
+      # phoenix, `CREATE DATABASE phoenix`) failed against a real k3d cluster with "permission denied
+      # to create database" -- the "atlas" owner role has no CREATEDB privilege by default, unlike
+      # compose's own pgvector/pgvector image where POSTGRES_USER=atlas IS the initdb superuser.
+      # postInitSQL runs as superuser in the "postgres" database BEFORE bootstrap.initdb's own
+      # database/owner even exist (CNPG's documented ordering, the same mechanism postInitApplicationSQL
+      # above already uses one step later), the correct place for a role level grant like this one.
+      # Bootstrap only: this fixes every FRESH cluster from here on, not a cluster that already
+      # bootstrapped before this change landed (CNPG has no retroactive "run this again" hook, and
+      # this repo's own CNPG posture disables persisted superuser access, `enableSuperuserAccess`
+      # unset/false, so there is no supported way to grant this after the fact either).
+      postInitSQL:
+        - ALTER ROLE {{ .Values.cnpg.owner }} CREATEDB;

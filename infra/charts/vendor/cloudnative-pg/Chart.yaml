@@ -1,0 +1,27 @@
+apiVersion: v2
+appVersion: 1.29.1
+# The upstream chart declares an optional "monitoring" dependency (an aliased grafana-dashboards
+# subchart, condition monitoring.grafanaDashboard.create, default false) that this repo strips: it
+# needs a live `helm repo add`/`dependency build` against an external repo to resolve, which breaks
+# the hermetic `task test` render (zero network, SP5 digest section 2/CLAUDE.md's PR lane contract).
+# Nothing in this chart's own templates references the subchart directly (grep verified), so
+# removing it changes no rendered behavior; SP6 (observability) can reintroduce a Grafana dashboard
+# its own way if it ever wants one.
+description: CloudNativePG Operator Helm Chart
+home: https://cloudnative-pg.io
+icon: https://raw.githubusercontent.com/cloudnative-pg/artwork/main/cloudnativepg-logo.svg
+keywords:
+- operator
+- controller
+- postgresql
+- postgres
+- database
+kubeVersion: '>=1.29.0-0'
+maintainers:
+- email: p.scorsolini@gmail.com
+  name: phisco
+name: cloudnative-pg
+sources:
+- https://github.com/cloudnative-pg/charts
+type: application
+version: 0.28.1

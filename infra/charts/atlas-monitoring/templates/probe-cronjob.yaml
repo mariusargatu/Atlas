@@ -1,0 +1,39 @@
+{{- /* D29: "sentinel probe CronJob... known answer / known refusal / known injection queries drawn
+from the fact registry every 5 minutes." Reuses the SAME digest pinned atlas-backend image
+unmodified -- testing/harness/sentinel/probe.py is already baked in via backend/Dockerfile's own
+`COPY testing/harness ./testing/harness`, the identical mechanism atlas-jobs' rag-init Job already
+relies on for `python -m rag_tools.ingest` (no new image, no Dockerfile change, no new chart to
+vendor a base image into). `sentinel.probe`'s own module docstring: a real authenticated session
+over the network (/auth/login then /chat), never an in process graph import -- a probe failure is
+evidence about the DEPLOYED service, never this CronJob's own code path. */ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: atlas-sentinel-probe
+  namespace: {{ .Values.namespace }}
+spec:
+  schedule: {{ .Values.probe.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0 # a failed probe run is itself the signal (atlas_probe_success stays at 0
+      # for the next scrape); retrying it here would only delay how quickly AtlasProbeFailure fires.
+      template:
+        metadata:
+          name: atlas-sentinel-probe
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sentinel-probe
+              image: "{{ .Values.images.backend.repository }}@{{ .Values.images.backend.digest }}"
+              imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+              command: ["uv", "run", "--no-sync", "python", "-m", "sentinel.probe"]
+              env:
+                - name: ATLAS_PROBE_BASE_URL
+                  value: {{ .Values.probe.baseUrl | quote }}
+                - name: ATLAS_PROBE_PUSHGATEWAY_URL
+                  value: "http://pushgateway:9091"
+                - name: ATLAS_PROBE_CUSTOMER_ID
+                  value: {{ .Values.probe.customerId | quote }}

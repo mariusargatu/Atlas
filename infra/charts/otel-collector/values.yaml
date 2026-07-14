@@ -1,0 +1,23 @@
+# Defaults local to this chart; helmfile always supplies the real namespace/image digest/config
+# through environments/base + environments/{{ .Environment.Name }} (see infra/helmfile.yaml).
+# `observability.otelCollector.image` deliberately mirrors the EXACT field path SP6 task 3 already
+# parked in environments/base/values.yaml (its own comment: "parked here for whichever later task
+# claims the SP5 reserved helmfile slot") -- this chart reads that SAME field rather than declaring
+# a second, independently pinned digest for the identical image, so the two can never drift apart
+# (testing/tests/test_observability_values.py already holds that field to parity with
+# docker-compose.yml; a bare `helm template` outside helmfile falls back to this all zero
+# placeholder, exactly like every other chart's own local only default in this repo).
+namespace: atlas
+
+observability:
+  otelCollector:
+    image:
+      repository: otel/opentelemetry-collector-contrib
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# The committed infra/observability/otel-collector.yaml content, joined in by helmfile's own
+# readFile templating (infra/environments/base/otel-collector-values.yaml.gotmpl, applied to every
+# environment per D3: one set of charts), never duplicated by hand into this chart -- a regenerate
+# of that file (contract_tools.redaction) reaches this ConfigMap on the very next render, no second
+# copy to keep in sync.
+otelCollectorConfig: ""

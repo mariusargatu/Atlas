@@ -1,0 +1,9 @@
+# Defaults local to this chart; helmfile always supplies real values through environments/base +
+# environments/<env> (see infra/helmfile.yaml). This fallback only matters for a bare `helm template`
+# run outside helmfile.
+namespace: atlas
+
+ingress:
+  rateLimit:
+    average: 20
+    burst: 40

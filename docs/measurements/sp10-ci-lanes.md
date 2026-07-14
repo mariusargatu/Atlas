@@ -179,7 +179,7 @@ already reviewed infrastructure, never a sixth or seventh lane this sub project 
 ## 7. Carries to SP11 and SP12: cancelled, accepted debt with no future owner
 
 SP11 (portfolio surface) and SP12 (record and replay return) were cancelled by user directive on
-2026-07-21, recorded in the ledger (`.superpowers/sdd/progress.md`) directly: "DO SP9 + SP10 THEN
+2026-07-21, recorded in the development ledger directly: "DO SP9 + SP10 THEN
 STOP. SP11 + SP12 CANCELLED." SP10 is therefore the last sub project this repository's own dual plane
 rewrite effort will complete. Every item this sub project's own planning digest and task reports
 named as an SP11 or SP12 carry is stated here plainly as accepted debt: real, disclosed, and now

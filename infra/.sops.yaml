@@ -1,0 +1,7 @@
+# SOPS creation rules for everything under infra/environments/. Two age recipients on every
+# encrypted file (D41): a single age key must not be the root secret of the whole system. Either
+# recipient's private key decrypts a file encrypted here; neither recipient's private key is ever
+# committed (see infra/README.md for where they actually live).
+creation_rules:
+  - path_regex: environments/.*\.enc\.yaml$
+    age: age1ggptvx4jjezvzgc7w4jusjw5mejpl7l8qy9yt33qgjj58tgqde8qzldw7e,age1w4q6596lcvf8zx8hzgudaz8wqselvf0a0hms54k508cesx9huemse46u96

@@ -1,0 +1,12 @@
+{{- /* The exact committed infra/observability/otel-collector.yaml, joined in by helmfile's own
+readFile templating (infra/environments/observability-values.yaml) rather than copy pasted into this
+chart -- one source of truth, the same "regenerate and assert drift" file testing/tests/
+test_redaction.py already gates docker-compose.yml's own otel-collector service against. */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ .Values.namespace }}
+data:
+  otel-collector.yaml: |
+{{ .Values.otelCollectorConfig | indent 4 }}

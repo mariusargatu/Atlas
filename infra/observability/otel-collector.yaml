@@ -1,0 +1,113 @@
+# GENERATED FILE, do not hand edit. Source: testing/harness/contract_tools/redaction.py
+# (`uv run python -m contract_tools.redaction --write`), the SAME regenerate and assert equality
+# mechanism contract_tools.mcp_snapshot and contract_tools.trace_inventory already established
+# (D11/D22), reused here for D13's "one redacting collector" and D27's "schema generated redaction
+# allowlist."
+#
+# redaction_policy_version: 726bb9ddc4b174af -- contract_tools.redaction.redaction_policy_version(),
+# a short sha256 prefix over the canonical, sorted allowed_keys list below (SP6 task 7 review fix
+# round 1, Important 1). Content addressed: this changes automatically if allowed_keys below ever
+# changes, adding OR removing any key. Exposed on every exported span as
+# atlas.privacy.redaction_policy_version (backend/atlas/adapters/trace_translation.py's own
+# BUILD_ATTRIBUTES, derived independently there without an import back into this harness module).
+#
+# allowed_keys below unions three categories, matching D13's own "Base: pinned OTel GenAI semconv
+# version + openinference.span.kind (Phoenix compatibility) + atlas.* extensions" framing:
+# RESERVED_TRACE_ATTRIBUTES (testing/harness/contract_tools/loader.py, the 30 name single checklist
+# authority, all reserved in v1 per D13 whether or not each one has a real emitter yet), every
+# gen_ai.* key backend/atlas/adapters/trace_translation.py's table actually emits today (derived by
+# walking the committed contracts/trace/span_inventory.json and translating every real entry, never
+# a hand maintained literal), and openinference.span.kind itself (the OTel wire encoding of the
+# contract's own top level span_kind field, needed for Phoenix's own span categorization, found live
+# during this task's own operator verification). testing/tests/test_redaction.py holds the gen_ai
+# category to set equality against the translation table's own live output: a new emitted key with
+# no redaction decision fails that hermetic test the moment this file is next regenerated and
+# reviewed, it does not silently pass through unredacted.
+#
+# D13: one OTel collector, redaction with a generated allowlist, then fan out. Phoenix is the ONLY
+# deployed backend; LangSmith/LangWatch stay commented configuration below, proving pluggability
+# without ever being a live export target (this plan's Global Constraints: neither name may ever
+# appear in pyproject.toml, only here, a Go binary's own YAML). Raw OTLP archives to a local file
+# (D13's own "raw OTLP archived"; the compose/helm deployment mounts this path to a volume an
+# operator can ship to object storage, not built by this task). Redaction runs exactly ONCE,
+# upstream of every fan out target below, so neither Phoenix nor the archive ever sees an unredacted
+# span.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  redaction:
+    allow_all_keys: false
+    allowed_keys:
+      - atlas.config.hash
+      - atlas.contract.dataset_version
+      - atlas.contract.manifest_version
+      - atlas.contract.sse_version
+      - atlas.contract.trace_version
+      - atlas.corpus.version
+      - atlas.cost.input_tokens
+      - atlas.cost.output_tokens
+      - atlas.cost.usd
+      - atlas.degradation.mode
+      - atlas.guard.decision
+      - atlas.index.build_id
+      - atlas.judge.id
+      - atlas.judge.rubric_version
+      - atlas.judge.verdict
+      - atlas.privacy.content_captured
+      - atlas.privacy.redaction_policy_version
+      - atlas.privacy.synthetic
+      - atlas.rerank.scores_post
+      - atlas.rerank.scores_pre
+      - atlas.retrieval.doc_ids
+      - atlas.semconv.version
+      - atlas.stage.assemble_ms
+      - atlas.stage.embed_ms
+      - atlas.stage.rerank_ms
+      - atlas.stage.retrieve_ms
+      - atlas.stage.ttft_ms
+      - atlas.subject.pseudonym
+      - atlas.turn.seq
+      - atlas.variant
+      - gen_ai.request.model
+      - openinference.span.kind
+    ignored_keys: []
+    summary: debug
+
+exporters:
+  otlp/phoenix:
+    endpoint: phoenix:4317
+    tls:
+      insecure: true
+  file/raw_archive:
+    path: /var/log/otel/raw-otlp-archive.jsonl
+    format: json
+
+  # D13: LangSmith and LangWatch exist only as commented configuration here, proving pluggability
+  # without ever being a live export target. This plan's Global Constraints: neither package/SDK may
+  # ever appear in pyproject.toml; a Go binary's own YAML is the only place either name may appear
+  # at all.
+  # otlphttp/langsmith:
+  #   endpoint: https://api.smith.langchain.com/otel/v1/traces
+  #   headers:
+  #     x-api-key: ${LANGSMITH_API_KEY}
+  #     Langsmith-Project: atlas
+  # otlphttp/langwatch:
+  #   endpoint: https://app.langwatch.ai/api/otel/v1/traces
+  #   headers:
+  #     Authorization: Bearer ${LANGWATCH_API_KEY}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [redaction]
+      exporters: [otlp/phoenix, file/raw_archive]
+      # LangSmith/LangWatch stay out of this list too: adding either here would be the actual
+      # pluggability step, deliberately not taken (D13: Phoenix is the only DEPLOYED backend).

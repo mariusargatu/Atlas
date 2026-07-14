@@ -1,0 +1,10 @@
+apiVersion: v2
+name: atlas-jobs
+description: >-
+  SP5 task 2: the one shot Jobs translated from docker-compose.yml's checkpointer-migrate and
+  rag-init services (compose parity, SP5 digest section 1: same backend image, same commands).
+  Kubernetes has no native `service_completed_successfully` primitive (the digest's own flagged
+  gap), so both Jobs are Helm pre-install/pre-upgrade hooks: `helmfile sync` blocks until they
+  succeed, and a rerun deletes and recreates the Job instead of hitting the "field is immutable"
+  error `helm upgrade` would otherwise raise against an already completed Job's pod template.
+version: 0.1.0

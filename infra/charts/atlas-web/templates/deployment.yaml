@@ -1,0 +1,36 @@
+{{- /* Compose parity (docker-compose.yml's own "web" service): frontend/Dockerfile's nginx image,
+unmodified nginx.conf (its `proxy_pass http://backend:8000/;` is why atlas-backend's own Service is
+named literally "backend", see that chart's service.yaml comment). No env vars: the built SPA is
+static, nginx.conf's only runtime dependency is the "backend" Service name resolving via cluster
+DNS. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-web
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: atlas-web
+spec:
+  replicas: {{ .Values.web.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: atlas-web
+  template:
+    metadata:
+      labels:
+        app: atlas-web
+    spec:
+      containers:
+        - name: web
+          image: "{{ .Values.images.web.repository }}@{{ .Values.images.web.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

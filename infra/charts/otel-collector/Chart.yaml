@@ -1,0 +1,13 @@
+apiVersion: v2
+name: otel-collector
+description: >-
+  SP6 task 5: claims the helm half of the SP5 reserved observability slot (SP5 digest open decision
+  11; SP6 task 3's own park, not claim boundary, testing/tests/test_observability_values.py). The
+  redacting OTel collector (D13), translated 1:1 from docker-compose.yml's own `otel-collector`
+  service: same digest pinned image, same committed config (infra/observability/otel-collector.yaml,
+  regenerated and drift gated by contract_tools.redaction, read here via helmfile's own `readFile`
+  templating rather than duplicated into this chart, see infra/environments/observability-values.yaml).
+  Fans out to Phoenix (this same release's sibling, infra/charts/phoenix) and a raw OTLP archive file
+  on an emptyDir (`securityContext.fsGroup` gives the fixed non root UID 10001 write access without
+  compose's own separate chown init Job, Kubernetes' own equivalent mechanism).
+version: 0.1.0

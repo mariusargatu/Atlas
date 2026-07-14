@@ -1,0 +1,9 @@
+apiVersion: v2
+name: atlas-indexes
+description: >-
+  SP5 task 3: the PersistentVolume/PersistentVolumeClaim pair for indexes/, replacing atlas-jobs'
+  Task 2 raw hostPath mount per that task's own handoff (SP5 digest section 2's design). The
+  underlying k3d node path (`k3d cluster create --volume $(pwd)/indexes:/indexes@all`, unchanged
+  since Task 2) is the same; only the indirection atlas-jobs' rag-init Job reaches it through
+  changes, from an inline hostPath volume to a PVC bound to a statically provisioned PV.
+version: 0.1.0

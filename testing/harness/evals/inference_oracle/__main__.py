@@ -1,6 +1,7 @@
 """Runnable demo of the differential oracle: catch inference-truth the lookup oracle can't see.
 
-`task oracle` runs this. Daniel (cust_legacy_term) has used 512 GB against a 500 GB cap, over his
+`task oracle` runs this. Daniel (cust_legacy_term) has used 512 GB against his legacy plan's data
+cap, over his
 allowance. That fact is a derivation (usage vs cap), not a stored column: the shipped lookup oracle
 can confirm a cap exists and stops there, with no way to ask whether he is over it. The differential
 oracle derives the answer from the facts and compares it to the model's claim, so a plausible
@@ -10,7 +11,6 @@ Pure domain reads, zero egress, no model call.
 """
 from __future__ import annotations
 
-from decimal import Decimal
 
 from atlas.domain import accounts
 from atlas.domain.metrics import Answer, is_correct_vs_truth
@@ -18,8 +18,9 @@ from atlas.domain.metrics import Answer, is_correct_vs_truth
 from evals.inference_oracle.claim import Claim
 from evals.inference_oracle.differential import check
 from evals.inference_oracle.rules import remaining_allowance_gb
+from testing.tests.fixtures.catalog_expectations import EXPECTED_CURRENT_PLAN, EXPECTED_LEGACY_PLAN
 
-_CUSTOMER = "cust_legacy_term"  # Daniel: 512 GB used against a 500 GB cap
+_CUSTOMER = "cust_legacy_term"  # Daniel: 512 GB used against the legacy plan's data cap
 
 
 def main() -> None:
@@ -47,11 +48,16 @@ def main() -> None:
     verdict = check(Claim("over_allowance", False), _CUSTOMER)
     print(f"  differential   {verdict.render()}\n")
 
-    # A second inference truth question: what does switching to the current Fast plan cost?
-    print('agent answer: "Switching to Fast would cost you about £4 more a month."')
-    cost_verdict = check(Claim("monthly_cost_change", Decimal("4.00"), args=("plan_current_fast",)), _CUSTOMER)
+    # A second inference truth question: what does switching to the current plan cost?
+    derived_delta = EXPECTED_CURRENT_PLAN.monthly_price - EXPECTED_LEGACY_PLAN.monthly_price
+    print(f'agent answer: "Switching would cost you about {-derived_delta} more a month."')
+    cost_verdict = check(Claim("monthly_cost_change", -derived_delta, args=("plan_current_fast",)), _CUSTOMER)
     print(f"  differential   {cost_verdict.render()}")
-    print("  (Fast is £35, the legacy plan is £39, so switching saves £4 — the claim has the sign backwards.)\n")
+    print(
+        f"  (current plan is {EXPECTED_CURRENT_PLAN.monthly_price}, the legacy plan is "
+        f"{EXPECTED_LEGACY_PLAN.monthly_price}, so switching saves {-derived_delta}, "
+        "the claim has the sign backwards.)\n"
+    )
 
     print("Lookup-truth grades a column. Inference-truth grades a derivation. Most expensive failures")
     print("live in the second, and a flat key-value oracle waves them through.")

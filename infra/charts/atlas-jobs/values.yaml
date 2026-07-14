@@ -1,0 +1,22 @@
+# Defaults local to this chart; helmfile always supplies real values through environments/base +
+# environments/<env> (see infra/helmfile.yaml).
+namespace: atlas
+credentialsSecretName: atlas-postgres-credentials
+
+postgres:
+  host: atlas-pg-rw # CNPG's auto created read write Service: "<clusterName>-rw", same namespace
+  database: atlas
+
+images:
+  backend:
+    repository: atlas-registry:5000/atlas-backend
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# Task 3: rag-init mounts the indexes/ corpus via the PVC infra/charts/atlas-indexes owns
+# (`pvcName`), not a raw hostPath (Task 2's own simpler shape, now replaced -- see this chart's own
+# comment in templates/job-rag-init.yaml). `corpusDir` is still this chart's own concern: it names
+# the mount PATH the ingest command's `--load-existing` argument reads, unrelated to how the volume
+# is backed.
+indexes:
+  pvcName: atlas-indexes-pvc
+  corpusDir: corpus-0.1.1-bge-m3-03f983e0

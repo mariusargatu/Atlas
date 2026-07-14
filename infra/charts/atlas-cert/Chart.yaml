@@ -1,0 +1,11 @@
+apiVersion: v2
+name: atlas-cert
+description: >-
+  SP5 task 5: the wildcard cert story (D3: "one wildcard cert via cert-manager DNS-01, persisted as
+  a secret across teardowns"). cert-manager the OPERATOR is installed by infra/tofu/cluster (kube-
+  hetzner's own enable_cert_manager toggle, a cluster bootstrap concern, burst only); this chart is
+  the workload half, D3's "one set of charts" pattern: a ClusterIssuer (Cloudflare DNS-01 solver) and
+  a wildcard Certificate, gated entirely on .Values.certManager.enabled (base default false, burst
+  only true, the same conditional template gating infra/charts/tei's own tei.mode already
+  established) so local renders an empty release rather than a chart that only half applies.
+version: 0.1.0

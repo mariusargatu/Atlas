@@ -1,0 +1,32 @@
+{{- /* Traefik's IngressRoute `tls.secretName` resolves against the SAME namespace as the
+IngressRoute itself (infra/charts/atlas-ingress, .Values.namespace, "atlas"), unlike the
+ClusterIssuer's own secretRef above; this Certificate therefore lives in .Values.namespace, not
+"cert-manager". atlas-ingress does not yet reference this Secret (Task 4 shipped `entryPoints: web`
+only, no websecure/TLS; wiring `tls.secretName: atlas-wildcard-tls` plus a websecure entryPoint is
+the next task to touch that chart, named here as the seam rather than done in this task, the same
+"name it, do not implement it here" discipline atlas-ingress's own middleware.yaml already applies to
+the D35 spend budget).
+
+Persisted secret pattern (D3: "persisted as a secret across teardowns", research note 08's own
+ordering warning "restore ordering is a startup dependency"): infra/scripts/burst-destroy.sh backs
+this Secret up to R2 (tls/ prefix, infra/README.md's bucket layout doc) BEFORE tofu destroy tears the
+cluster down; infra/scripts/burst-up.sh restores it via `kubectl apply` BEFORE this release's own
+`helmfile sync` sync runs, so cert-manager finds an already valid Certificate on a fresh cluster and
+reconciles as a no op instead of solving a fresh DNS-01 challenge (and burning a Let's Encrypt rate
+limit slot) on every single spin up. A first ever spin up has nothing to restore, which is not
+fatal (both scripts treat a missing backup as the honest bootstrap case, not an error). */ -}}
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: atlas-wildcard
+  namespace: {{ .Values.namespace }}
+spec:
+  secretName: atlas-wildcard-tls
+  issuerRef:
+    name: atlas-letsencrypt-dns01
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.certManager.baseDomain | quote }}
+    - {{ printf "*.%s" .Values.certManager.baseDomain | quote }}
+{{- end }}

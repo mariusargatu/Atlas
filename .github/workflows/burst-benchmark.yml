@@ -115,7 +115,7 @@ name: burst-benchmark
 #
 # `timeout-minutes: 180` at the job level exists SPECIFICALLY so a hung live step (a stuck matrix
 # cell, a wedged load run -- SP9's own live capture session recorded exactly this failure mode
-# against a real TEI node, see .superpowers/sdd/progress.md) cannot leave the burst tier provisioned
+# against a real TEI node) cannot leave the burst tier provisioned
 # indefinitely with no destroy attempt ever triggered: the timeout itself becomes the "earlier step
 # failure" the fire drill below simulates, one more path into the SAME always() step, not a
 # separate mechanism. `concurrency.cancel-in-progress: false` (below) is the complementary choice: a

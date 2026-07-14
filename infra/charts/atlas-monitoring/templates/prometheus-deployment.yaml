@@ -1,0 +1,48 @@
+{{- /* No HA, no PVC (emptyDir): the same "no unnecessary state/replication" posture CNPG
+(instances: 1) and every other release in this repo already hold themselves to -- this reference
+deployment's own TSDB restarting empty on every pod restart is an accepted, honest simplification
+for a reference system, not a production monitoring stack's own durability bar. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: "{{ .Values.images.prometheus.repository }}@{{ .Values.images.prometheus.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+              readOnly: true
+            - name: config
+              mountPath: /etc/prometheus/rules/atlas-rules.yml
+              subPath: atlas-rules.yml
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}

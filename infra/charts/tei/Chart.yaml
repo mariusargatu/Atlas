@@ -1,0 +1,10 @@
+apiVersion: v2
+name: tei
+description: >-
+  SP5 task 3: generic HF text-embeddings-inference service chart, rendered twice via helmfile
+  (tei-embed, tei-rerank releases) with `.Values.role` selecting which of `.Values.tei.embed` /
+  `.Values.tei.rerank` supplies the model id, revision, max batch tokens flag, warmup timing, and
+  resource shape for that render (D3: one set of charts, only the values differ). Both releases
+  share the one image digest (`.Values.tei.image`, copied verbatim from docker-compose.yml) and the
+  one PVC backed HF cache pattern (`.Values.tei.cache`).
+version: 0.1.0

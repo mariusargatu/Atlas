@@ -1,0 +1,163 @@
+# Defaults local to this chart; helmfile always supplies the real namespace/backend image through
+# environments/base + environments/{{ .Environment.Name }} (see infra/helmfile.yaml). This file's
+# own content -- the digest pinned prometheus/alertmanager/pushgateway images, the alertmanager
+# receiver, and the D29 rule set below -- is chart INTERNAL and never go templated by helmfile
+# itself (unlike environments/base/otel-collector-values.yaml): Helm reads a chart's own values.yaml
+# as plain literal YAML, which is exactly why the Prometheus alerting template syntax inside
+# `rules.groups[].rules[].annotations` below (`{{ $labels.class }}`, evaluated by Alertmanager at
+# notification time, not by Helm or helmfile at render time) is safe to write here and would NOT be
+# safe to move into an environments/*/values.yaml file.
+namespace: atlas
+credentialsSecretName: atlas-postgres-credentials
+imagePullPolicy: IfNotPresent
+
+images:
+  prometheus:
+    repository: prom/prometheus
+    digest: "sha256:76947e7ef22f8a698fc638f706685909be425dbe09bd7a2cd7aca849f79b5f64" # v3.6.0
+  alertmanager:
+    repository: prom/alertmanager
+    digest: "sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba" # v0.28.1
+  pushgateway:
+    repository: prom/pushgateway
+    digest: "sha256:03738d278e082ee9821df730c741b3b465c251fc2b68a85883def301a55a6215" # v1.11.1
+  # atlas-backend's own image (environments/base + environments/<env> override this): the sentinel
+  # probe CronJob reuses it unmodified (testing/harness/sentinel/probe.py is already baked in via
+  # backend/Dockerfile's own `COPY testing/harness`, the SAME mechanism atlas-jobs' rag-init Job
+  # already relies on for `rag_tools.ingest` -- no new image, no Dockerfile change).
+  backend:
+    repository: atlas-registry:5000/atlas-backend
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+postgres:
+  host: atlas-pg-rw
+  database: atlas
+
+# D29: "Prometheus + Alertmanager only, ONE webhook receiver."
+#
+# Fix round 1 (SP6 Task 5 review, Important finding 1): the value committed here used to be a real,
+# live, public ntfy.sh topic. The review's own tamper probe proved it accepted a genuine post
+# (alertmanager_notifications_total{integration="webhook"} incremented with zero failures), which
+# means the value itself was a leak surface: anyone who guesses or scans for that topic name can
+# observe every alert this reference deployment ever sends, or publish fake alerts into it, with no
+# authentication required either way. That risk did not depend on a credential being exposed, so
+# treating "no bearer credential" as sufficient justification (the original commit's own reasoning)
+# missed the actual concern.
+#
+# Replaced with an inert placeholder on the RFC 2606 reserved .invalid TLD, which can never resolve
+# on the public internet: a stray `helmfile sync`, or this value being copied into burst or any
+# future real environment without being overridden first, cannot start delivering real telemetry
+# anywhere. It is still a syntactically well formed URL (scheme, host, path), so Alertmanager's own
+# config loader, this chart's render test, and the structural assertion in
+# testing/tests/test_infra_manifests.py that parses this rendered YAML still all accept it; only
+# reachability was removed, shape was not.
+#
+# A real deployment must override this value before the receiver does anything useful. That
+# mechanism already exists from SP5: the same SOPS plus age setup environments/burst/secrets.enc.yaml
+# already uses today for the Cloudflare DNS-01 token can supply a real webhook URL, and any bearer
+# credential a real provider (Slack, PagerDuty) would need, through an encrypted values file at
+# deploy time, never a plain committed default. The receiver wiring itself (route, receiver name, one
+# webhook, D29's "deterministic paging") is unchanged by this fix and was already proven live end to
+# end by the SP6 Task 5 review: a synthetic alert crossed inactive, pending, firing and was delivered
+# successfully through this exact template. Only the URL value changed here, not the mechanism that
+# delivers it.
+alertmanager:
+  webhookUrl: "https://alerts.atlas.invalid/webhook"
+
+# The sentinel probe CronJob (D29: "every 5 minutes during bursts"; this reference system runs it on
+# the same cadence in both tiers, D3's "one set of charts" applied to the schedule too, not just the
+# chart content).
+probe:
+  schedule: "*/5 * * * *"
+  baseUrl: "http://backend:8000" # atlas-backend chart's own Service, named "backend" for nginx parity
+  customerId: "cust_current"     # Sarah, the SEED "happy path" account (domain/accounts.py)
+
+# D29's deterministic paging set, Task 5's own contract text verbatim: probe failure, staleness
+# gauge threshold, breaker open, error rate. ONE source of truth: templates/prometheusrule.yaml
+# renders this exact block under a PrometheusRule CRD's `spec.groups` (CRD shaped, apiVersion
+# monitoring.coreos.com/v1, forward compatible with a future real prometheus-operator install, see
+# this chart's own Chart.yaml comment), and templates/prometheus-configmap.yaml renders the SAME
+# block as a native Prometheus rule file's top level `groups:` (the shape the ACTUALLY RUNNING
+# Prometheus in this release evaluates) -- both are `{{ .Values.rules.groups | toYaml }}` over this
+# one list, so the two can never drift apart.
+#
+# The judge counter pair (backend/atlas/metrics.py's own docstring: "atlas_judge_pass_total /
+# atlas_judge_fail_total", `record_judge_pass`/`record_judge_fail`, `judge.emission.emit_verdict`'s
+# own call site): SP8 Task 4 remainder wires both the writers and the `atlas.judge` rule group below
+# (correcting this comment's own former stale "SP7 adds its own rule group here once it wires the
+# judge, not before" -- the 7a/7b split predates that wording, ADR-029's own rule that owner changes
+# travel with the emitter). The threshold (judge fail rate over 20 percent of the sampling window)
+# is the published research figure; the HLD itself pins no number, so this is SP8's own documented
+# choice, not a value carried from any prior sub project.
+rules:
+  groups:
+    - name: atlas.probe
+      rules:
+        - alert: AtlasProbeFailure
+          expr: min_over_time(atlas_probe_success[10m]) == 0
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "Sentinel probe class {{ $labels.class }} has failed for 5m or more"
+            description: >-
+              atlas_probe_success{class="{{ $labels.class }}"} has read 0 for the last 10 minutes.
+              Evidence about the DEPLOYED service (testing/harness/sentinel/probe.py drives
+              /auth/login then /chat over the network), never the probe's own code path.
+    - name: atlas.staleness
+      rules:
+        - alert: AtlasCorpusStaleness
+          expr: atlas_corpus_staleness > 0
+          for: 15m
+          labels:
+            severity: page
+          annotations:
+            summary: "registry_version disagrees with the active index's corpus_version"
+            description: >-
+              D29's only drift signal: AtlasSettings.registry_version (ATLAS_REGISTRY_VERSION) no
+              longer matches the deployed index's own build_manifest.json:corpus_version. The index
+              behind this deployment is stale relative to the fact registry.
+    - name: atlas.resilience
+      rules:
+        - alert: AtlasCircuitBreakerOpen
+          expr: atlas_circuit_breaker_state == 2
+          for: 1m
+          labels:
+            severity: page
+          annotations:
+            summary: "CircuitBreaker open for provider_key={{ $labels.provider_key }}"
+            description: >-
+              backend/atlas/adapters/resilience.py's CircuitBreaker.state(), read fresh at every
+              /metrics scrape (backend/atlas/metrics.py), never re derived. The controller
+              adjudication landing the resilience seam's breaker half at this metrics layer, not the
+              trace layer (adapters/trace_translation.py's own docstring records the paired
+              decision).
+    - name: atlas.errors
+      rules:
+        - alert: AtlasErrorRateHigh
+          expr: >-
+            (sum(rate(atlas_http_requests_total{status_class="5xx"}[15m])) /
+            sum(rate(atlas_http_requests_total[15m]))) > 0.05
+          for: 15m
+          labels:
+            severity: page
+          annotations:
+            summary: "5xx error rate exceeded 5% over 15 minutes"
+            description: "HLD section 5.6's own figure: 'error rate >5% over 15min'."
+    - name: atlas.judge
+      rules:
+        - alert: AtlasJudgeFailRateHigh
+          expr: >-
+            (sum(rate(atlas_judge_fail_total[15m])) /
+            sum(rate(atlas_judge_fail_total[15m]) + rate(atlas_judge_pass_total[15m]))) > 0.2
+          for: 15m
+          labels:
+            severity: page
+          annotations:
+            summary: "Judge fail rate exceeded 20% over the sampling window"
+            description: >-
+              backend/atlas/metrics.py's record_judge_pass/record_judge_fail (judge.emission.
+              emit_verdict's own call site) are this rule's only writers. 20% is the published
+              research figure for a judge fail rate alert; the HLD itself pins no number, so this
+              threshold is SP8's own documented choice (Task 4 remainder), following the same 15
+              minute window shape as atlas.errors above for consistency.

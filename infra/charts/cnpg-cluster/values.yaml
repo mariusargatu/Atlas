@@ -1,0 +1,20 @@
+# Defaults local to this chart, matching charts/scaffold's precedent: helmfile always supplies real
+# values through environments/base + environments/<env> (see infra/helmfile.yaml); these only matter
+# for a bare `helm template` run outside helmfile.
+namespace: atlas
+
+cnpg:
+  instances: 1
+  clusterName: atlas-pg
+  database: atlas
+  owner: atlas
+  storageSize: 1Gi
+
+# atlas: charts/scaffold's Secret, extended this task with a `username` key so CNPG's
+# bootstrap.initdb.secret can consume it directly instead of a second, redundant Secret.
+credentialsSecretName: atlas-postgres-credentials
+
+images:
+  postgresPgvector:
+    repository: atlas-registry:5000/atlas-postgres-pgvector
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"

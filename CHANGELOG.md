@@ -1,8 +1,7 @@
 # Changelog
 
 Sub project history for Atlas, the reference system for the "Evals Are Checks, Not Tests" series.
-One block per sub project, factual, drawn from the planning ledger (`.superpowers/sdd/progress.md`)
-and the sub project plans. This is a project history record, not a
+One block per sub project, factual, drawn from the planning ledger and the sub project plans. This is a project history record, not a
 semantic versioned package: sub projects are numbered SP1 onward, most recent first, and a new
 block lands at sub project completion or whenever a `contracts/*/schema.json` family changes
 version.

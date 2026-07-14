@@ -16,8 +16,7 @@ completely UNRELATED idea that happens to share the English word "mutation." It 
 mutation testing OF `quality.ir_metrics` itself, a frozen registry of realistic IR metric bugs, each
 paired with a witness input proving the Phase 1 test suite has teeth. It has nothing to do with
 registry facts, corpus re rendering, or agent answers; this package does not adopt it, does not
-delete it, and does not claim it. It remains unclaimed SP7 quality territory, exactly as the SP8
-digest (`.superpowers/sdd/sp8-planning-digest.md`, section 2) already names.
+delete it, and does not claim it. It remains unclaimed SP7 quality territory.
 
 The lane, three libraries, never reimplemented:
 

@@ -16,13 +16,13 @@ Three lanes in SP8 need a live call and are deferred here, exactly like SP7's ow
    `docs/measurements/sp7-datasets-metrics.md` Section 5 already used). This lane needs no Postgres,
    no TEI, and no fastlane node at all: `judge.provisional.manufactured_cases` cites the registry
    directly, so nothing about its own infrastructure blocks it. It is deferred here anyway, because
-   Task 8 is a docs only task (per `.superpowers/sdd/sp8-task-7-report.md`'s own closing line, "Task 8
+   Task 8 is a docs only task (per the SP8 task 7 report's own closing line, "Task 8
    ... is a docs only task with no further code lane to build") and running it would spend real
    provider money to produce a live measurement outside this task's own scope, not because of a
    missing dependency. See Section 2 for the exact recompute command.
 2. **The metamorphic live lane** (`testing/tests/test_metamorphic_live.py`, SP8 Task 6). Needs
    `docker compose up postgres tei-embed tei-rerank`. The fastlane node (the native amd64 TEI
-   endpoint) was deleted after SP7 (`.superpowers/sdd/sp8-hitl-report.md`'s own account of the batch
+   endpoint) was deleted after SP7 (the SP8 human-in-the-loop report's own account of the batch
    label generation lane names the same deletion); the compose stack is the documented, keyless but
    slower, retrieval and embedding path. This environment currently has no Atlas compose services
    running (`docker compose ps` returns an empty service list at authoring time). See Section 4.
@@ -226,7 +226,7 @@ the real stub retriever, and four "has teeth" tests prove each invariant can gen
 missing the ground truth id, a scrambled ranking below its floor, a drifted answer failing
 equivalence, a corpus with the winning chunk silently dropped), all in
 `testing/tests/test_metamorphic.py`. The 0.5 floors were measured against the real stub retriever
-during development, not guessed and then encoded (`.superpowers/sdd/sp8-task-6-report.md`'s own
+during development, not guessed and then encoded (the SP8 task 6 report's own
 account).
 
 **Live lane: PENDING LIVE CAPTURE.** `testing/tests/test_metamorphic_live.py`, written, import
@@ -278,7 +278,7 @@ once the run exits), also not run, collecting cleanly and deselected by the defa
 `judge.llm_judge.judge_label` reads `getattr(reply, "content", "") or ""` and hands it straight to
 `_parse_label`, which calls `text.strip()`. Every seeded cassette in the hermetic suite returns a
 plain string `content`, so this path is exercised only with strings today
-(`.superpowers/sdd/sp8-task-3-report.md`'s own Concern 1 names this gap first). A real live reply from
+(the SP8 task 3 report's own Concern 1 names this gap first). A real live reply from
 an Anthropic model can return `content` as a LIST of content blocks rather than a bare string, the
 exact shape the retired `evals/judge/live_calibration.py`'s own `_content_text` helper existed to
 flatten. `judge_label` has no such flattening step, so a list shaped `content` makes `text.strip()`
@@ -333,7 +333,7 @@ real human labels exist in this repository as of this writing (`var/labels/` is 
 from this working tree). A full labeling pass over today's 76 cases would produce at most 76 real
 labels, not the roughly 200 the SP11 portfolio surface should expect, unless SP7's own seed set growth
 lands first. This is not a defect in the HITL machinery: the label store, the adjudication page, and
-the batch answer generator are all built and hermetically tested (`.superpowers/sdd/sp8-hitl-report.md`),
+the batch answer generator are all built and hermetically tested (the SP8 human-in-the-loop report),
 and `task label:generate-live` makes no assumption about the seed set's own size, processing however
 many cases exist at the moment it runs. It is a real, honestly stated gap between the dataset's
 current size and the label target, carried forward explicitly to SP11 in Section 8.
@@ -356,7 +356,7 @@ resolves the first time Section 3.1's recompute lands and is committed.
   cross provider jury); nothing here builds that caller, only the mechanism it will invoke.
 - **The D28 local generator spot check seam.** "Judge behavior on local generator outputs is human
   spot checked before the kappa gate is trusted on that distribution"
-  (`.superpowers/sdd/sp8-planning-digest.md` Section 1). This needs SP9's local generation and GPU
+  (the SP8 planning digest Section 1). This needs SP9's local generation and GPU
   burst arm to exist before there is anything to spot check; SP8 names the seam only (this document
   is that naming) and builds no machinery for it.
 

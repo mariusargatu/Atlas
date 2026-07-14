@@ -1,0 +1,31 @@
+{{- /* The standard Prometheus pattern for a batch job's metrics (prometheus/pushgateway's own
+documented use case): the sentinel probe CronJob's Pod is gone by the time Prometheus would next
+scrape it, so the usual pull model cannot reach it -- this release's own prometheus-configmap.yaml
+scrapes THIS service instead, `honor_labels: true` so the probe's own `class` label survives the
+scrape unchanged. Not a second alerting/routing channel (D29's "Prometheus + Alertmanager only, one
+webhook receiver" boundary is about ALERT delivery, not metric transport); this is purely how a
+short lived Job's own metric gets INTO Prometheus at all. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pushgateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: pushgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pushgateway
+  template:
+    metadata:
+      labels:
+        app: pushgateway
+    spec:
+      containers:
+        - name: pushgateway
+          image: "{{ .Values.images.pushgateway.repository }}@{{ .Values.images.pushgateway.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: 9091

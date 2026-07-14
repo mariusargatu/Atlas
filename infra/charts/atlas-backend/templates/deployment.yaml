@@ -1,0 +1,110 @@
+{{- /* Compose parity (docker-compose.yml's own "backend" service): same image (backend/Dockerfile,
+built read only, unmodified), same env var names/defaults (ATLAS_MODE, MODEL_PROVIDER, MODEL_ID,
+OLLAMA_BASE_URL, ATLAS_RETRIEVER, ATLAS_CHECKPOINTER, ATLAS_INDEX_DIR), same /healthz contract
+(server.py). Two real translation choices, both already established by atlas-jobs (Task 2):
+ATLAS_PG_DSN is assembled in a shell wrapper from the credentials Secret (Kubernetes has no native
+string interpolation across env vars, the same reason atlas-jobs' Jobs do this); ATLAS_TEI_EMBED_URL/
+ATLAS_TEI_RERANK_URL are gated by `.Values.tei.mode` (inherited requirement from the Task 3
+adjudication): "external" (local) passes through `.Values.tei.external.<role>Url` unchanged (the
+SAME resolved URL the connectivity-check Job already verifies), "inCluster" (burst) points at the in
+cluster Service DNS names the tei chart's own service.yaml already names for exactly this purpose
+("http://tei-embed:80" / "http://tei-rerank:80", matching docker-compose.yml's own service name
+shape). */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: atlas-backend
+spec:
+  replicas: {{ .Values.backend.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: atlas-backend
+  template:
+    metadata:
+      labels:
+        app: atlas-backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.images.backend.repository }}@{{ .Values.images.backend.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          # backend/Dockerfile's own CMD, reissued explicitly (not inherited) because ATLAS_PG_DSN
+          # must be assembled from the Secret first; the uvicorn invocation itself is byte for byte
+          # the Dockerfile's own CMD.
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export ATLAS_PG_DSN="postgresql://${PGUSER}:${PGPASSWORD}@{{ .Values.postgres.host }}:5432/{{ .Values.postgres.database }}"
+              exec uv run --no-sync uvicorn atlas.server:app --host 0.0.0.0 --port 8000 --proxy-headers
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: password
+            - name: ATLAS_MODE
+              value: {{ .Values.backend.mode | quote }}
+            - name: MODEL_PROVIDER
+              value: {{ .Values.backend.modelProvider | quote }}
+            - name: MODEL_ID
+              value: {{ .Values.backend.modelId | quote }}
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.backend.ollamaBaseUrl | quote }}
+            - name: ATLAS_FALLBACK_MODEL
+              value: {{ .Values.backend.fallbackModel | default "" | quote }}
+            - name: ATLAS_RETRIEVER
+              value: {{ .Values.backend.retriever | quote }}
+            - name: ATLAS_CHECKPOINTER
+              value: {{ .Values.backend.checkpointer | quote }}
+            - name: ATLAS_INDEX_DIR
+              value: "/app/indexes/{{ .Values.indexes.corpusDir }}"
+            {{- if eq .Values.tei.mode "external" }}
+            - name: ATLAS_TEI_EMBED_URL
+              value: {{ .Values.tei.external.embedUrl | quote }}
+            - name: ATLAS_TEI_RERANK_URL
+              value: {{ .Values.tei.external.rerankUrl | quote }}
+            {{- else }}
+            - name: ATLAS_TEI_EMBED_URL
+              value: "http://tei-embed:80"
+            - name: ATLAS_TEI_RERANK_URL
+              value: "http://tei-rerank:80"
+            {{- end }}
+            {{- /* D35 seam (the SP5 plan Task 4; SP5 planning
+            digest section 5's own recommendation): the infra half of D35 ends here, at "the value is
+            in the Deployment's env, sourced from a values file." The per session token/cost budget
+            that actually reads this ceiling and trips the degradation ladder to honest refusal is
+            backend application code (SP4/SP6), not written by this task. Only set where a real spend
+            ceiling applies (environments/burst/values.yaml); local never sets
+            backend.burstSpendCeilingUsd, so this env var is simply absent there. */ -}}
+            {{- if .Values.backend.burstSpendCeilingUsd }}
+            - name: ATLAS_BURST_SPEND_CEILING_USD
+              value: {{ .Values.backend.burstSpendCeilingUsd | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: indexes
+              mountPath: "/app/indexes/{{ .Values.indexes.corpusDir }}"
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            initialDelaySeconds: 5
+      volumes:
+        - name: indexes
+          persistentVolumeClaim:
+            claimName: {{ .Values.indexes.pvcName | default "atlas-indexes-pvc" }}

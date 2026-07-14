@@ -13,6 +13,8 @@ from atlas.domain.accounts import apply_write
 from atlas.domain.actions import ActionsBackend
 from atlas.domain.confirmation import ConfirmationError, PendingAction, execute_if_confirmed
 
+from testing.tests.fixtures.catalog_expectations import EXPECTED_CURRENT_PLAN
+
 
 def _pending(key: str = "idem-1") -> PendingAction:
     return PendingAction("change_plan", {"plan_id": "plan_current_fast"}, key, "cust_current")
@@ -54,12 +56,12 @@ def test_a_distinct_action_applies_again():
 
 def test_change_plan_writes_through_and_reprices_the_bill():
     backend = _wt_backend()
-    # Daniel starts on the legacy plan (term, capped, GBP 39). Move him to the current plan
+    # Daniel starts on the legacy plan (term, capped). Move him to the current plan
     assert accounts.get_account("cust_legacy_term").plan_id == "plan_legacy_value"
     _confirm(backend, "change_plan", {"plan_id": "plan_current_fast"}, "cust_legacy_term", "k1")
     acct = accounts.get_account("cust_legacy_term")
     assert acct.plan_id == "plan_current_fast"
-    assert accounts.get_bill("cust_legacy_term").amount == __import__("decimal").Decimal("35.00")  # re priced
+    assert accounts.get_bill("cust_legacy_term").amount == EXPECTED_CURRENT_PLAN.monthly_price  # re priced
     assert accounts.get_usage("cust_legacy_term").data_cap_gb is None                               # now uncapped
 
 
@@ -111,3 +113,13 @@ def test_idempotency_key_gates_the_write_through_not_just_the_audit():
     retry = _confirm(backend, "open_ticket", {"subject": "Router replacement"}, "cust_current", "same-key")
     assert retry.applied is False
     assert len(accounts.list_tickets("cust_current")) == 1  # the writer ran once, not twice
+
+
+def test_cancel_service_is_audited_without_changing_account_state():
+    backend = _wt_backend()
+    before = accounts.get_account("cust_legacy_term")
+    result = _confirm(backend, "cancel_service", {"reason_category": "bereavement"}, "cust_legacy_term", "idem-cancel-1")
+    after = accounts.get_account("cust_legacy_term")
+    assert result.applied
+    assert after == before  # audit-only: no account field changed
+    assert backend.applied("cust_legacy_term", "cancel_service")

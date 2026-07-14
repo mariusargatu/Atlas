@@ -1,0 +1,53 @@
+# Defaults local to this chart; helmfile always supplies real values through environments/base +
+# environments/<env> (see infra/helmfile.yaml) plus a per release `set: role: embed|rerank`. This
+# fallback (role=embed) only matters for a bare `helm template` run outside helmfile.
+namespace: atlas
+role: embed
+imagePullPolicy: IfNotPresent
+
+# curlimages/curl (D37 digest pinned): a genuine manifest LIST for multiple architectures (linux/amd64,
+# linux/arm64, linux/386, linux/ppc64le all present), unlike the TEI image's single platform index -- what
+# connectivity-check-job.yaml uses to verify an external TEI endpoint's /info from inside the
+# cluster without hitting the same containerd platform refusal the TEI image itself would.
+externalCheck:
+  image:
+    repository: docker.io/curlimages/curl
+    digest: sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+
+tei:
+  # "inCluster" (default, what burst's real amd64 nodes use): renders deployment.yaml/service.yaml/
+  # pvc.yaml. "external": renders connectivity-check-job.yaml instead, against
+  # `tei.external.<role>Url` (environments/local/values.yaml's own override; see that file's comment).
+  mode: inCluster
+  external:
+    embedUrl: ""
+    rerankUrl: ""
+  image:
+    repository: ghcr.io/huggingface/text-embeddings-inference
+    digest: sha256:ad950d30878eceb72aaf32024d26fa2b1d04a75304fa0b4776b49aa1941fea07
+  cache:
+    storage: 5Gi
+  embed:
+    modelId: BAAI/bge-m3
+    revision: 5617a9f61b028005a4858fdac845db406aefb181
+    maxBatchTokens: null
+    startupPeriodSeconds: 15
+    startupFailureThreshold: 180
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 18Gi
+  rerank:
+    modelId: BAAI/bge-reranker-v2-m3
+    revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
+    maxBatchTokens: 4096
+    startupPeriodSeconds: 15
+    startupFailureThreshold: 60
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 12Gi

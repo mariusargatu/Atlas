@@ -1,0 +1,12 @@
+apiVersion: v2
+name: phoenix
+description: >-
+  SP6 task 5: claims the helm half of the SP5 reserved observability slot (SP5 digest open decision
+  11), translated 1:1 from docker-compose.yml's own `phoenix` + `phoenix-db-init` services. Phoenix
+  is the ONLY deployed trace backend (D13); its own storage is a NEW "phoenix" database inside the
+  SAME CNPG Postgres cluster every other component uses (SP6 digest design question 5: never SQLite,
+  never a second Postgres instance), created by a one shot pre-install/pre-upgrade hook Job mirroring
+  atlas-jobs' own Helm hook pattern (idempotent: `CREATE DATABASE ... IF NOT EXISTS` has no native
+  Postgres form, so this Job checks pg_database first, the exact compose entrypoint script copied
+  verbatim).
+version: 0.1.0

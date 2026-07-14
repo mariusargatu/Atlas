@@ -1,0 +1,35 @@
+# Defaults local to this chart; helmfile always supplies real values through environments/base +
+# environments/<env> (see infra/helmfile.yaml) for images/tei/postgres/indexes. This fallback only
+# matters for a bare `helm template` run outside helmfile.
+namespace: atlas
+credentialsSecretName: atlas-postgres-credentials
+imagePullPolicy: IfNotPresent
+
+images:
+  backend:
+    repository: atlas-registry:5000/atlas-backend
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+postgres:
+  host: atlas-pg-rw # CNPG's auto created read write Service: "<clusterName>-rw", same namespace
+  database: atlas
+
+indexes:
+  pvcName: atlas-indexes-pvc
+  corpusDir: corpus-0.1.1-bge-m3-03f983e0
+
+# docker-compose.yml's own "backend" service defaults, copied verbatim for compose parity (SP5 task
+# 4's own acceptance bar). Shared across tiers in environments/base/values.yaml (D3: the k3d and
+# burst tiers run the identical application posture, replay mode, unless an operator explicitly
+# opts into ATLAS_MODE=live the same way compose's own `ATLAS_MODE=live docker compose up` does).
+# burstSpendCeilingUsd stays unset here and in environments/base/values.yaml; only
+# environments/burst/values.yaml sets a real value (the D35 seam, see templates/deployment.yaml's
+# own comment).
+backend:
+  replicas: 1
+  mode: replay
+  modelProvider: ollama
+  modelId: "qwen2.5:7b"
+  ollamaBaseUrl: "http://host.docker.internal:11434"
+  retriever: pgvector
+  checkpointer: postgres

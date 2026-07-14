@@ -1,0 +1,11 @@
+# Defaults local to this chart; helmfile always supplies real values through environments/base +
+# environments/<env> (see infra/helmfile.yaml). This fallback only matters for a bare `helm template`
+# run outside helmfile. certManager.enabled false here matches environments/base/values.yaml's own
+# shared default (local never overrides it); environments/burst/values.yaml is the only place it
+# flips true.
+namespace: atlas
+certManager:
+  enabled: false
+  acmeEmail: ""
+  baseDomain: ""
+  cloudflareApiToken: ""

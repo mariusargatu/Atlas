@@ -1,0 +1,14 @@
+{{- /* D37: the image reference is digest shaped (repo@sha256:...) always, never a floating tag.
+`images.postgresPgvector.digest` is a placeholder (all zero sha256) until `task k3d:up` builds and
+pushes the real image and records the real digest here (see infra/environments/local/values.yaml's
+generated block); the render test asserts the SHAPE, not a specific value, since a real rebuild
+changes the digest on every run. */ -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: ImageCatalog
+metadata:
+  name: atlas-postgres-pgvector
+  namespace: {{ .Values.namespace }}
+spec:
+  images:
+    - major: 17
+      image: "{{ .Values.images.postgresPgvector.repository }}@{{ .Values.images.postgresPgvector.digest }}"

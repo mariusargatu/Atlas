@@ -1,0 +1,30 @@
+{{- /* D13/D29: "kube prometheus stack alerts as CRDs." Renders hermetically (helm/helmfile template
+never contacts a live API server, so no prometheus-operator CRD types need to be installed anywhere
+for this to render). C3 fix (SP6 final review): applying this to a cluster with no
+prometheus-operator installed used to fail the ENTIRE release at apply time (an unknown CRD kind,
+reproduced live on a fresh cluster -- helm rejects every kind in one `helm template` output
+together, so Prometheus/Alertmanager/Pushgateway/the sentinel CronJob never installed either); the
+one CRD this custom resource actually needs is now vendored, verbatim, in this chart's own
+`../crds/` directory (see that file's own header for the source and version), so a fresh cluster
+installs cleanly. No controller reconciles this resource still (unchanged, and still this chart's
+own honest scope boundary, Chart.yaml) -- the rule CONTENT lives here, forward compatible with a
+future real operator swap in, while the ACTUALLY RUNNING Prometheus this release deploys reads the
+identical rule content in native form instead (templates/prometheus-configmap.yaml), so the D29
+rule set is genuinely live and alerting today, not merely committed as inert YAML waiting on
+infrastructure this task does not install. */ -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: atlas-sentinel-rules
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: atlas-monitoring
+spec:
+  groups:
+{{ .Values.rules.groups | toYaml | indent 4 }}
+  # SP8 owns this seam (ADR-029's rule: owner changes travel with the emitter): atlas_judge_pass_total
+  # and atlas_judge_fail_total are exposed on backend/atlas/metrics.py's /metrics, now with real
+  # writers (record_judge_pass/record_judge_fail, judge.emission.emit_verdict's own call site). The
+  # atlas.judge group above alerts when the judge fail rate crosses 20 percent of the sampling
+  # window, the published research figure this sub project records as its own choice (the HLD
+  # itself pins no number).

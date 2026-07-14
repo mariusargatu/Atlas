@@ -1,0 +1,19 @@
+{{- /* Only rendered in inCluster mode (see deployment.yaml's own comment). ClusterIP Service named
+"tei-embed"/"tei-rerank", matching docker-compose.yml's own service names (tei-embed:80,
+tei-rerank:80) so Task 4's backend release can point ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL at the
+same in cluster DNS shape compose already uses on its own network, on tiers where TEI actually runs
+in cluster (burst's real amd64 nodes today). */ -}}
+{{- if eq .Values.tei.mode "inCluster" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: tei-{{ .Values.role }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: tei-{{ .Values.role }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

@@ -1,0 +1,46 @@
+{{- /* Translated from docker-compose.yml's phoenix-db-init service, verbatim: connect to the
+EXISTING "atlas" database first (CREATE DATABASE cannot run inside a transaction against the
+database being created, and Postgres has no native `CREATE DATABASE IF NOT EXISTS`), check
+pg_database for "phoenix", create it only if absent. A pre-install/pre-upgrade Helm hook, same
+pattern atlas-jobs' own job-migrate.yaml/job-rag-init.yaml already established (helmfile sync blocks
+until this succeeds; a rerun deletes and recreates rather than hitting Kubernetes' "field is
+immutable" error against an already completed Job). */ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: atlas-phoenix-db-init
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      name: atlas-phoenix-db-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: phoenix-db-init
+          image: "{{ .Values.dbInitImage.repository }}@{{ .Values.dbInitImage.digest }}"
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              psql -h {{ .Values.postgres.host }} -U "${PGUSER}" -d {{ .Values.postgres.database }} -tc \
+                "SELECT 1 FROM pg_database WHERE datname = 'phoenix'" | grep -q 1 || \
+                psql -h {{ .Values.postgres.host }} -U "${PGUSER}" -d {{ .Values.postgres.database }} -c \
+                "CREATE DATABASE phoenix"
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: password

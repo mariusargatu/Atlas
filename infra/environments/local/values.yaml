@@ -1,0 +1,85 @@
+# k3d tier: the default dev/eval environment (D3). `imagePullPolicy` applies to every Deployment
+# Task 3/4 add (tei-embed/tei-rerank/atlas-web); `registry` was Task 1's placeholder for the value
+# Task 2 actually delivers below as the `images:` block (one entry per image `task k3d:up` builds
+# and pushes, each already digest shaped) once the k3d local registry existed to push to.
+registry: atlas-registry:5000
+imagePullPolicy: IfNotPresent
+
+# Proves the SOPS + age mechanism end to end (D41): decrypted through helmfile's own `vals`
+# `ref+sops://` integration at render time, not a side channel the render test never exercises. The
+# password is fake (mirrors docker-compose.yml's own atlas-dev-password), the encryption is real.
+# `username` is plaintext (not a secret, matches compose's own POSTGRES_USER=atlas): CNPG's
+# bootstrap.initdb.secret needs both keys in the one Secret (charts/scaffold/templates/secret.yaml).
+postgres:
+  username: atlas
+  password: ref+sops://environments/local/secrets.enc.yaml#/postgresPassword
+
+# BEGIN k3d:up generated image digests -- task k3d:up rewrites this block on every image build; do
+# not hand edit. Placeholder (all zero sha256) until the first `task k3d:up` run records the real
+# digests pushed to the k3d local registry (D37: repo@sha256:..., never a floating tag).
+# atlas-registry:5000 is the registry's CLUSTER INTERNAL address (a k3s containerd registry mirror
+# to the "atlas-registry" docker container on port 5000, verified against this cluster's own
+# /etc/rancher/k3s/registries.yaml); the HOST VISIBLE push address is the SAME container's
+# separately published, randomly assigned host port, which `task k3d:up` resolves at build time
+# (see infra/README.md's "Registry addressing" note).
+images:
+  postgresPgvector:
+    repository: atlas-registry:5000/atlas-postgres-pgvector
+    digest: "sha256:6c07458f4fdac286e0fe0475e52fbf74d80a9312880d8d738e5eb21f5218940a"
+  backend:
+    repository: atlas-registry:5000/atlas-backend
+    digest: "sha256:24407a199391216a5adc4f8ee7a4f428b80162ed5e9bf97b6d6642272cb8886b"
+  web:
+    repository: atlas-registry:5000/atlas-web
+    digest: "sha256:aa1efef4446c5afa8bf7c87b932ecb6bb1db30a59f4058327a7a8b7a4d812805"
+# END k3d:up generated image digests
+
+# Task 3, LOCAL TIER: TEI runs OUTSIDE the cluster (`tei.mode: external`, overriding
+# environments/base/values.yaml's own "inCluster" default), against a real external amd64 endpoint,
+# not on this k3d cluster. Two things were found live standing the in cluster path up first, both
+# real, both worth recording plainly rather than papering over:
+#
+# 1. ghcr.io publishes text-embeddings-inference as an OCI INDEX wrapping one linux/amd64 manifest
+#    (verified with `docker buildx imagetools inspect`). k3s's own containerd CRI image pull path
+#    strictly refuses an index mediated pull when the index carries no entry for the node's own
+#    platform (arm64, this machine) -- confirmed true even after sideloading the exact bytes locally
+#    (`k3d image import`, `ctr images pull --local --platform linux/amd64` both genuinely unpacked
+#    the real ~228MB amd64 content; kubelet's own CRI pull still failed identically afterwards).
+#    This half was actually fixable: mirroring the resolved INNER manifest (not the index) into the
+#    k3d local registry with `crane copy` produced a reference containerd pulled cleanly.
+# 2. Even past that fix, with a memory limit already raised well above docker-compose.yml's own
+#    documented Rosetta emulation peaks, tei-embed kept getting OOMKilled seconds into its ONNX
+#    Runtime warmup pass (the model was already cache hit from the PVC, confirmed via `kubectl logs
+#    --previous`; this was not a download problem). docker-compose.yml tolerates the identical
+#    uncapped warmup only because compose sets no memory limit at all; a bounded k8s Deployment
+#    cannot. tei-rerank, notably, DID stabilize successfully under the same emulation once its own
+#    max-batch-tokens cap (compose's own existing flag) took effect -- so Rosetta execution itself is
+#    not the blocker, a large model's transient warmup peak on an already memory constrained dev
+#    machine running a second TEI stack alongside compose's own is.
+#
+# Rather than run an inconsistent split (rerank in cluster, embed external), and given a real
+# external amd64 endpoint already exists for local development, local points BOTH services at it.
+# `task k3d:up`/`task infra:render`/`task k3d:verify` all source .env.fastlane (repo root, gitignored,
+# never committed -- see .gitignore) for ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL BEFORE ever invoking
+# helmfile, and fail with a worded message naming that file if the variables are still unset --
+# THAT is where this mechanism actually fails closed, not here. `ref+envsubst://$VAR` below is the
+# same `vals` mechanism postgres.password's own `ref+sops://` above already uses (environment
+# values.yaml files are not Go templated the way helmfile.yaml itself is -- `vals` resolves any
+# `ref+<provider>://` prefixed STRING value at render time regardless), but `envsubst` semantics are
+# deliberately permissive (verified live: an unset variable resolves to an empty string, the same
+# behavior as the shell's own `envsubst`, not an error) -- there is no separate strict "fail if
+# unset" env provider in this vals build (`ref+env://` was tried first and does not exist: "no
+# provider registered for scheme env"). The node's IP is NEVER hand written into any committed file:
+# it lives only in the gitignored .env.fastlane an operator provisions locally.
+tei:
+  mode: external
+  external:
+    embedUrl: ref+envsubst://$ATLAS_TEI_EMBED_URL
+    rerankUrl: ref+envsubst://$ATLAS_TEI_RERANK_URL
+
+# Task 2's simplest correct indexes/ mount (SP5 digest section 2): a k3d node hostPath, populated by
+# `k3d cluster create --volume $(pwd)/indexes:/indexes@all`. Task 3 replaces this with a proper
+# PersistentVolume/PersistentVolumeClaim pair.
+indexes:
+  hostPath: /indexes/corpus-0.1.1-bge-m3-03f983e0
+  corpusDir: corpus-0.1.1-bge-m3-03f983e0

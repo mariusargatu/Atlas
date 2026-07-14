@@ -1,0 +1,37 @@
+{{- /* Two ConfigMap keys, both driven off the SAME `.Values.rules.groups` the PrometheusRule CRD
+(templates/prometheusrule.yaml) also renders -- one source of truth, so the rule content the
+actually running Prometheus below evaluates can never drift from what the CRD form declares.
+`atlas-rules.yml`'s own top level `groups:` is Prometheus' own native rule file shape, byte
+identical in structure to a PrometheusRule CRD's `spec.groups` (both are literally the same nested
+list), the reason a single values block can feed both forms with zero translation. */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: {{ .Values.namespace }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    rule_files:
+      - /etc/prometheus/rules/atlas-rules.yml
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager:9093"]
+    scrape_configs:
+      - job_name: atlas-backend
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["backend:8000"]
+      - job_name: pushgateway
+        honor_labels: true # the sentinel probe's own labels win, not the scrape target's
+        static_configs:
+          - targets: ["pushgateway:9091"]
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+  atlas-rules.yml: |
+    groups:
+{{ .Values.rules.groups | toYaml | indent 6 }}

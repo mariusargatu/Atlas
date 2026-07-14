@@ -137,8 +137,7 @@ slice essentially never splits its scores entirely between 0 and 1. Computed dir
 | 55 (retrieval relevant slice) | 0.1889 | the smallest paired nDCG delta this slice could reliably see (80% power, alpha 0.05), even under the WORST case variance bound |
 | 76 (full seed set) | 0.1607 | the same bound if every hand authored case somehow carried a retrieval relevant score |
 
-The SP7 planning digest's own sizing recommendation (`.superpowers/sdd/sp7-planning-digest.md`,
-design question 4) named "roughly a 3 point nDCG delta, 250 to 400 queries" as the target a future
+The SP7 planning digest's own sizing recommendation (design question 4) named "roughly a 3 point nDCG delta, 250 to 400 queries" as the target a future
 regression check should resolve. `stats.required_n(0.03, 0.5) = 2181`: even under the worst case
 variance bound, resolving a 3 point (0.03) nDCG delta needs roughly 2181 cases, nowhere near this
 seed set's 55 or 76. This is named here explicitly rather than claimed away: **the seed set, as it
@@ -226,8 +225,7 @@ Sections 2 and 4, run by the same rerun command in the callout above.
 - The flagship baseline row (Section 4) is the named comparison point for any future rerank model
   swap or query rewrite step: measured against this baseline, never a silently broken assertion.
 
-**Informational carries from the T5/T6 reviews** (`.superpowers/sdd/sp7-task-5-review.md`,
-`sp7-task-6-review.md`), restated here since T7 is SP7's last task and nothing later in this sub
+**Informational carries from the T5/T6 reviews**, restated here since T7 is SP7's last task and nothing later in this sub
 project revisits them:
 
 - **The RAG registry id space (`corpus/registry/core.yaml`, e.g. `plan-fiber-500`) and the backend

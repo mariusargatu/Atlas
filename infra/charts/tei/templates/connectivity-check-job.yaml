@@ -1,0 +1,62 @@
+{{- /* Only rendered when `.Values.tei.mode` is "external" (environments/local/values.yaml's own
+override; see that file's own comment for why the local tier points at a real external amd64 TEI
+endpoint instead of running the Deployment in deployment.yaml). This Job is the in cluster half of
+Task 3's external endpoint verification: it proves a POD (not just this operator's own host shell)
+can actually reach `.Values.tei.external.<role>Url` across whatever network path the cluster's own
+egress takes, and that the endpoint serves the exact model_id/revision models.lock pins -- the same
+promise deployment.yaml's own startupProbe+readinessProbe would have proven in cluster, just against
+an external process this chart does not own or schedule.
+
+curlimages/curl (D37: digest pinned) rather than the TEI image itself: the TEI image is amd64 only
+(the entire reason this tier is in external mode to begin with), so using it here would hit the exact
+same containerd platform refusal on this arm64 node; curlimages/curl publishes a genuine manifest LIST
+for multiple architectures (verified: `docker buildx imagetools inspect` shows linux/arm64,
+linux/amd64, linux/386, linux/ppc64le entries, unlike the TEI image's single platform index), so it
+pulls natively here. */ -}}
+{{- if eq .Values.tei.mode "external" }}
+{{- $svc := index .Values.tei .Values.role -}}
+{{- $url := index .Values.tei.external (printf "%sUrl" .Values.role) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tei-{{ .Values.role }}-external-check
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      name: tei-{{ .Values.role }}-external-check
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: check
+          image: "{{ .Values.externalCheck.image.repository }}@{{ .Values.externalCheck.image.digest }}"
+          env:
+            - name: TEI_URL
+              value: {{ $url | quote }}
+            - name: EXPECTED_MODEL_ID
+              value: {{ $svc.modelId | quote }}
+            - name: EXPECTED_REVISION
+              value: {{ $svc.revision | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "checking ${TEI_URL}/info from inside the cluster (role={{ .Values.role }})"
+              INFO="$(curl -sf --max-time 10 "${TEI_URL}/info")"
+              echo "${INFO}"
+              echo "${INFO}" | grep -F "\"model_id\":\"${EXPECTED_MODEL_ID}\"" >/dev/null || {
+                echo "model_id mismatch: expected ${EXPECTED_MODEL_ID}, /info was: ${INFO}" >&2
+                exit 1
+              }
+              echo "${INFO}" | grep -F "\"model_sha\":\"${EXPECTED_REVISION}\"" >/dev/null || {
+                echo "model_sha mismatch: expected ${EXPECTED_REVISION}, /info was: ${INFO}" >&2
+                exit 1
+              }
+              echo "OK: in cluster egress reaches ${TEI_URL}, serving ${EXPECTED_MODEL_ID}@${EXPECTED_REVISION}"
+{{- end }}

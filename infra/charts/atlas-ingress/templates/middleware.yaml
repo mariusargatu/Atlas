@@ -1,0 +1,17 @@
+{{- /* D35 (HLD section 4.9): "Traefik middleware rate limiting by session and IP." This Middleware
+is the coarse, IP scoped EDGE control Traefik itself can enforce (sourceCriterion defaults to the
+client IP when unset). The finer grained PER SESSION token/cost budget D35 also names is backend
+application code: a typed ceiling enforced in FastAPI against the signed session identity, not an
+IP, tripping the degradation ladder to honest refusal at the per burst spend ceiling. That is
+SP4/SP6's job, not this chart's; the seam handed to whichever sub project implements it is
+ATLAS_BURST_SPEND_CEILING_USD (atlas-backend's own Deployment env, environments/burst/values.yaml),
+named here rather than implemented. */ -}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: atlas-rate-limit
+  namespace: {{ .Values.namespace }}
+spec:
+  rateLimit:
+    average: {{ .Values.ingress.rateLimit.average }}
+    burst: {{ .Values.ingress.rateLimit.burst }}

@@ -1,0 +1,3 @@
+# Defaults local to this chart. helmfile always supplies namespace (environments/base/values.yaml);
+# this fallback only matters for a bare `helm template` run outside helmfile.
+namespace: atlas

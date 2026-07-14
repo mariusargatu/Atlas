@@ -1,0 +1,222 @@
+# Atlas infra: one helmfile, two environments (D3: "one set of charts" across the k3d local tier
+# and the Hetzner burst tier; the two only ever diverge on values, never on chart content).
+#
+# `local`  the default dev/eval environment: a k3d cluster, free, always available.
+# `burst`  rare, credential gated (Task 5): public demos, the load lane, headline benchmarks only.
+#
+# Render with zero cluster and zero credentials: `helmfile -e local template` (or `task infra:render`).
+# Apply needs a running cluster and is out of scope for this task (`task k3d:up`, Task 2 onward).
+environments:
+  local:
+    values:
+      - environments/base/values.yaml
+      - environments/local/values.yaml
+  burst:
+    values:
+      - environments/base/values.yaml
+      - environments/burst/values.yaml
+---
+releases:
+  # SP5 task 1: the atlas namespace + the fake local postgres credential proving the SOPS + age
+  # mechanism end to end. Task 4 appends atlas-backend, atlas-web, atlas-ingress to this same
+  # releases list; this release is not replaced by them.
+  - name: atlas-scaffold
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/scaffold
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 2: the CNPG operator itself, vendored locally (infra/charts/vendor/cloudnative-pg, the
+  # upstream cnpg/cloudnative-pg chart pinned at 0.28.1) rather than added as a live Helm repository
+  # dependency, so `helmfile template` never needs network at render time (hermetic `task test`,
+  # same discipline as every committed cassette/corpus artifact in this repo). Its own namespace,
+  # cluster scoped operator watching every namespace, separate from the `atlas` app namespace.
+  - name: cnpg-operator
+    namespace: cnpg-system
+    createNamespace: true
+    chart: ./charts/vendor/cloudnative-pg
+    set:
+      - name: crds.create
+        value: true
+
+  # SP5 task 2: the ImageCatalog (pointing at the custom pgvector image) + the Cluster CR (D1:
+  # instances=1, no pooler). Needs the operator's CRDs installed and atlas-scaffold's Secret
+  # (username/password) to exist first; `needs:` orders `helmfile sync`, the actual "Cluster
+  # reports Ready" wait is scripted in `task k3d:up` (Kubernetes has no native way for Helm to wait
+  # on a CRD becoming Ready the way it does for Deployments/Jobs).
+  - name: cnpg-cluster
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/cnpg-cluster
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - cnpg-system/cnpg-operator
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 3: the indexes/ PersistentVolume/PersistentVolumeClaim pair (infra/charts/atlas-indexes),
+  # replacing atlas-jobs' Task 2 raw hostPath mount per that task's own handoff. Needs atlas-scaffold
+  # for the namespace the PVC lives in (the PV itself is cluster scoped); atlas-jobs below needs THIS
+  # release so rag-init's Job can claim the PVC by name.
+  - name: atlas-indexes
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-indexes
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 2: the one shot Jobs translated from docker-compose.yml's checkpointer-migrate and
+  # rag-init services (compose parity). Helm pre-install/pre-upgrade hooks (see the chart's own
+  # Chart.yaml) block `helmfile sync` until both succeed; `needs: cnpg-cluster`/`needs: atlas-indexes`
+  # only order WHEN this release's hooks fire, not whether the Cluster is actually Ready yet, which
+  # is why `task k3d:up` waits on the Cluster's own Ready condition before running this release.
+  - name: atlas-jobs
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-jobs
+    needs:
+      - "{{ .Values.namespace }}/cnpg-cluster"
+      - "{{ .Values.namespace }}/atlas-indexes"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 3: BGE-M3 embeddings (D7) served by HF TEI CPU, generic chart (infra/charts/tei)
+  # rendered twice via `.Values.role` (D3: one set of charts). No `needs:` beyond the namespace:
+  # TEI has no dependency on CNPG/atlas-jobs, so `task k3d:up` deploys both TEI releases EARLY and
+  # waits on their readiness LATE, letting the (potentially tens of minutes long, per
+  # docker-compose.yml's own start_period comments) model warmup run in the background while the
+  # CNPG cluster and one shot Jobs complete on their own, much shorter, timeline.
+  - name: tei-embed
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/tei
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+    set:
+      - name: role
+        value: embed
+
+  # SP5 task 3: BGE-reranker-v2-m3 (D7), the same chart with role=rerank (--max-batch-tokens and the
+  # shorter 900s startup allowance come from environments/base/values.yaml's `tei.rerank`, not a
+  # second copy of this release's shape).
+  - name: tei-rerank
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/tei
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+    set:
+      - name: role
+        value: rerank
+
+  # SP5 task 4: docker-compose.yml's own "backend" service. Needs cnpg-cluster (the DSN it assembles
+  # at start), atlas-indexes (the PVC it mounts read only), and atlas-jobs (so the checkpointer
+  # schema and the rag corpus are already loaded before the app's own first request, matching
+  # compose's own `depends_on: condition: service_completed_successfully`). TEI readiness is not a
+  # helmfile `needs:` (both TEI releases have no dependency on this one either way); `task k3d:up`
+  # orders the actual wait.
+  - name: atlas-backend
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-backend
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/cnpg-cluster"
+      - "{{ .Values.namespace }}/atlas-indexes"
+      - "{{ .Values.namespace }}/atlas-jobs"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 4: docker-compose.yml's own "web" service (frontend/Dockerfile's nginx image,
+  # unmodified). Needs atlas-backend: its Service ("backend", not "atlas-backend", see that chart's
+  # own service.yaml comment) is what nginx.conf's baked in proxy_pass target resolves.
+  - name: atlas-web
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-web
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/atlas-backend"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 4 (D35): the k3s built in Traefik IngressRoute + rate limit Middleware, against
+  # atlas-web's own Service. No separate ingress controller release (SP5 digest open decision 6):
+  # k3s/kube-hetzner ship Traefik already, in both tiers.
+  - name: atlas-ingress
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-ingress
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/atlas-web"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP5 task 5 (D3): the wildcard cert workload half (ClusterIssuer + Certificate; the cert-manager
+  # OPERATOR itself is infra/tofu/cluster's own concern, kube-hetzner's enable_cert_manager toggle,
+  # burst only). Gated on .Values.certManager.enabled (base default false, burst only true, the same
+  # conditional gating tei.mode already established), so local renders an empty release rather than
+  # a chart that only half applies against a cluster with no cert-manager CRDs installed.
+  - name: atlas-cert
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-cert
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP6 task 3 parked the digests, SP6 task 5 claims the release (SP5 digest open decision 11 /
+  # testing/tests/test_observability_values.py's own "park, not claim" boundary): Phoenix's own
+  # storage, the SAME CNPG Postgres cluster in a new "phoenix" database (SP6 digest design question
+  # 5), never SQLite, never a second Postgres instance. Needs cnpg-cluster for the Postgres
+  # credentials Secret + reachable Service the db-init hook Job connects through.
+  - name: phoenix
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/phoenix
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/cnpg-cluster"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP6 task 5: the redacting OTel collector (D13), fanning out to Phoenix (this same tier's sibling
+  # release above) and a raw OTLP archive file. `needs: phoenix` orders WHEN this release's own
+  # Deployment schedules, not whether Phoenix is actually Ready yet (the same "needs orders sync,
+  # readiness is a separate live wait" distinction atlas-jobs' own comment already draws for
+  # cnpg-cluster); a live k3d/burst bringup script waits on both independently.
+  - name: otel-collector
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/otel-collector
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/phoenix"
+    values:
+      - environments/base/values.yaml
+      - environments/base/otel-collector-values.yaml.gotmpl
+      - environments/{{ .Environment.Name }}/values.yaml
+
+  # SP6 task 5: claims the prometheus-operator/kube-prometheus stack slot SP5 reserved (SP5 digest
+  # open decision 11). PrometheusRule CRDs, one Alertmanager webhook receiver, Prometheus +
+  # Alertmanager + Pushgateway (hand authored, digest pinned, no vendored operator -- this chart's
+  # own Chart.yaml names the scope boundary), and the sentinel probe CronJob against atlas-backend's
+  # own Service. Needs atlas-backend: the probe's pinned queries and the Prometheus scrape target
+  # both name that Service by DNS, "backend" (atlas-backend chart's own service.yaml, nginx parity).
+  - name: atlas-monitoring
+    namespace: "{{ .Values.namespace }}"
+    chart: ./charts/atlas-monitoring
+    needs:
+      - "{{ .Values.namespace }}/atlas-scaffold"
+      - "{{ .Values.namespace }}/atlas-backend"
+    values:
+      - environments/base/values.yaml
+      - environments/{{ .Environment.Name }}/values.yaml

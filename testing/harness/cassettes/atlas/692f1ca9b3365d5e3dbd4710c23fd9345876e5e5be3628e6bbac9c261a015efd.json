@@ -7,15 +7,20 @@
         "type": "system"
       },
       {
-        "content": "Plan page:\nOur current Fast plan is contract-free, with no minimum term, you can cancel any time, and there is no early-termination fee. Data is unlimited.\n\nQuestion: Is my plan contract-free, and can I cancel with no fee?",
+        "content": "Plan page:\nOur current plan is contract-free, with no minimum term, you can cancel any time, and there is no early-termination fee. Data is unlimited.\n\nQuestion: Is my plan contract-free, and can I cancel with no fee?",
         "type": "human"
       }
     ],
     "model_id": "ollama:qwen2.5:7b"
   },
   "response": {
-    "content": "Yes, your plan is contract-free and you can cancel at any time without any cancellation or early-termination fees.",
-    "tool_calls": []
+    "content": "Yes, your plan is contract-free with no minimum term. You can cancel at any time without an early-termination fee.",
+    "tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 110,
+      "output_tokens": 26,
+      "total_tokens": 136
+    }
   },
   "version": 1
 }

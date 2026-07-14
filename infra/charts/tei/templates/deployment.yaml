@@ -1,0 +1,91 @@
+{{- /* Only rendered when `.Values.tei.mode` is "inCluster" (environments/base/values.yaml's own
+default, what the burst tier's real amd64 Hetzner nodes use unchanged). LOCAL TIER: this arm64 k3d
+dev machine cannot run this Deployment (see environments/local/values.yaml's own comment for the
+full live diagnosis); `.Values.tei.mode: external` there renders connectivity-check-job.yaml instead
+of this file, and the actual TEI serving happens on a real external amd64 endpoint.
+
+One Deployment per role (embed|rerank), selected by `.Values.role` out of `.Values.tei.embed`/
+`.Values.tei.rerank` (D3: one chart, two releases, values only divergence). `.Values.tei.image` is
+the exact digest docker-compose.yml pins, copied verbatim (D37, D26): a public ghcr.io image, never
+locally built or pushed.
+
+--model-id/--revision are docker-compose.yml's own `command:` flags translated to k8s `args:` (the
+TEI image's ENTRYPOINT is the router binary itself, so these are its CLI arguments either way);
+--max-batch-tokens is only appended when set, matching docker-compose.yml's own tei-rerank cap (the
+Candle backend warmup cap, that file's own comment); tei-embed uses TEI's own uncapped default,
+docker-compose.yml's own choice, true here too since inCluster only ever runs on real amd64 hardware
+with no memory ceiling specific to arm64 emulation to protect against.
+
+startupProbe reproduces docker-compose.yml's healthcheck start_period EXACTLY via
+periodSeconds * failureThreshold (2700s embed / 900s rerank): Kubernetes' real equivalent of a
+docker healthcheck's start_period, not a generous initialDelaySeconds bolted onto the steady state
+probe. readinessProbe below mirrors compose's own steady state interval/timeout/retries (10s/5s/6)
+once startup succeeds; no livenessProbe is set; compose's own healthcheck is a `depends_on:
+condition: service_healthy` gate, not a trigger that restarts on unhealthy status.
+
+resources: see environments/base/values.yaml's own comment on the request/limit split (modest
+requests, no CPU limit, a memory limit generously above docker-compose.yml's own documented warmup
+peaks, not a tight one that would OOM kill a normal warmup). */ -}}
+{{- if eq .Values.tei.mode "inCluster" }}
+{{- $svc := index .Values.tei .Values.role -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tei-{{ .Values.role }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: tei-{{ .Values.role }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tei-{{ .Values.role }}
+  template:
+    metadata:
+      labels:
+        app: tei-{{ .Values.role }}
+    spec:
+      containers:
+        - name: tei
+          image: "{{ .Values.tei.image.repository }}@{{ .Values.tei.image.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          args:
+            - --model-id
+            - {{ $svc.modelId | quote }}
+            - --revision
+            - {{ $svc.revision | quote }}
+            {{- if $svc.maxBatchTokens }}
+            - --max-batch-tokens
+            - {{ $svc.maxBatchTokens | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: {{ $svc.resources.requests.cpu | quote }}
+              memory: {{ $svc.resources.requests.memory | quote }}
+            limits:
+              memory: {{ $svc.resources.limits.memory | quote }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: {{ $svc.startupPeriodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: {{ $svc.startupFailureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: tei-{{ .Values.role }}-cache
+{{- end }}

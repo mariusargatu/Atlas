@@ -1,0 +1,18 @@
+{{- /* Named literally "phoenix": infra/observability/otel-collector.yaml's own committed
+`exporters.otlp/phoenix.endpoint: phoenix:4317` already hardcodes this exact DNS name (compose
+parity -- the same service name docker-compose.yml's own network already gives it). */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: phoenix
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: phoenix
+  ports:
+    - name: ui
+      port: 6006
+      targetPort: ui
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc

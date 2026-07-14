@@ -1,0 +1,14 @@
+{{- /* Namespaced, bound to atlas-indexes-pv by name (`volumeName`), not by StorageClass matching:
+the static provisioning pattern this PV/PVC pair uses on purpose (see pv.yaml's own comment). */ -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-indexes-pvc
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  volumeName: atlas-indexes-pv
+  resources:
+    requests:
+      storage: {{ .Values.indexes.storageSize | quote }}

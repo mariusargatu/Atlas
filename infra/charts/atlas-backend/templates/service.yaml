@@ -1,0 +1,16 @@
+{{- /* Named literally "backend" (not "atlas-backend"): frontend/nginx.conf (read only reference,
+never edited by this task) hardcodes `proxy_pass http://backend:8000/;`, the exact DNS shape
+docker-compose.yml's own network already gives the "backend" compose service. Matching the Service
+name here is what lets the SAME built web image proxy correctly with zero edits to frontend/. */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: atlas-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

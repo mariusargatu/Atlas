@@ -1,0 +1,138 @@
+# Shared across every tier (D3: "one set of charts"). Anything identical between local k3d and
+# Hetzner burst belongs here so the two only ever diverge on values, never on chart content.
+namespace: atlas
+
+# BAAI/bge-m3 and BAAI/bge-reranker-v2-m3, --revision pinned from models.lock (D26: never a floating
+# alias). Copied verbatim from docker-compose.yml/models.lock. Task 3 (infra/charts/tei, rendered
+# twice as tei-embed/tei-rerank via `.Values.role`, D3: one set of charts) consumes every field
+# below, including EXPECTED_TEI_DIGESTS in the render test.
+#
+# mode: "inCluster" (this file's own default) actually schedules deployment.yaml/service.yaml/
+# pvc.yaml -- what the burst tier's real amd64 Hetzner nodes use, unchanged. environments/local's own
+# values override this to "external" (that file's own comment carries the full live diagnosis: an
+# arm64 k3d dev machine cannot run this amd64 only image reliably, found live -- a platform index
+# pull refusal fixable with a registry mirror, then a genuine memory ceiling the ONNX Runtime
+# warmup kept exceeding even after that fix and after raising limits). Every other field below stays
+# the exact compose pin regardless of mode: mode only changes WHERE TEI runs, never WHAT is pinned.
+#
+# image: the exact digest docker-compose.yml pins for both services (a public ghcr.io image, not
+# something this repo builds or pushes to the k3d registry -- D37 asks for digest shaped refs, not
+# that every image is locally built).
+#
+# cache.storage: the HF cache PVC (mounted at /data, TEI's own cache dir), the k8s equivalent of
+# compose's tei-embed-cache/tei-rerank-cache named volumes; ~2-3GB observed download, 5Gi leaves
+# headroom without being wasteful on a local disk.
+#
+# startupPeriodSeconds * startupFailureThreshold reproduces docker-compose.yml's own healthcheck
+# start_period EXACTLY (2700s embed / 900s rerank): a startupProbe is Kubernetes' real equivalent of
+# a docker healthcheck's start_period (a warmup grace window before failures count against the
+# container), not a generous initialDelaySeconds bolted onto the steady state readinessProbe.
+# readinessProbe below (10s period / 5s timeout / 6 failureThreshold) mirrors compose's own steady
+# state interval/timeout/retries once startup succeeds.
+#
+# resources: modest requests (a fair scheduling share, nothing more), but no CPU limit at all
+# (constraining CPU would only slow warmup down further). Memory limits sit generously above
+# docker-compose.yml's own comment on observed Rosetta emulation peaks (~10GB embed, ~4-10GB rerank);
+# 18Gi/12Gi keeps the same conservative baseline this task derived while live testing on the local
+# arm64 machine (see the Task 3 report), a reasonable floor for burst's real hardware too even though
+# burst does not carry the same risk specific to arm64 emulation.
+tei:
+  mode: inCluster
+  image:
+    repository: ghcr.io/huggingface/text-embeddings-inference
+    digest: sha256:ad950d30878eceb72aaf32024d26fa2b1d04a75304fa0b4776b49aa1941fea07
+  cache:
+    storage: 5Gi
+  embed:
+    modelId: BAAI/bge-m3
+    revision: 5617a9f61b028005a4858fdac845db406aefb181
+    maxBatchTokens: null # compose leaves tei-embed at TEI's own default (ONNX Runtime backend, no cap needed)
+    startupPeriodSeconds: 15
+    startupFailureThreshold: 180 # 15 * 180 = 2700s, docker-compose.yml's own tei-embed start_period
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 18Gi
+  rerank:
+    modelId: BAAI/bge-reranker-v2-m3
+    revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
+    maxBatchTokens: 4096 # compose's own cap: the Candle CPU backend's warmup batch is sized off this flag
+    startupPeriodSeconds: 15
+    startupFailureThreshold: 60 # 15 * 60 = 900s, docker-compose.yml's own tei-rerank start_period
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 12Gi
+
+# D1: one Postgres via CNPG, instances=1, no pooler, HA explicitly refused. Task 2 consumes this:
+# clusterName/database/owner match compose's POSTGRES_DB/POSTGRES_USER (both "atlas") for parity.
+cnpg:
+  instances: 1
+  clusterName: atlas-pg
+  database: atlas
+  owner: atlas
+  storageSize: 1Gi
+
+# Task 3: the indexes/ PersistentVolume's declared capacity (infra/charts/atlas-indexes). A hostPath
+# PV's capacity is not actually enforced by the kubelet the way a dynamically provisioned volume's
+# is, but PersistentVolume/PersistentVolumeClaim both require a value; 1Gi comfortably covers the
+# committed corpus-0.1.1-bge-m3-03f983e0 build. The actual node path lives in each environment's own
+# values.yaml (indexes.hostPath), not here: that path is environment specific, this size is not.
+indexes:
+  storageSize: 1Gi
+
+# Task 4: docker-compose.yml's own "backend" service defaults, copied verbatim for compose parity,
+# shared across both tiers (D3): the k3d and burst tiers run the identical application posture,
+# replay mode, unless an operator explicitly opts into ATLAS_MODE=live the same way compose's own
+# `ATLAS_MODE=live docker compose up` does. burstSpendCeilingUsd is deliberately absent here (the
+# D35 seam, infra/charts/atlas-backend/templates/deployment.yaml's own comment): only
+# environments/burst/values.yaml sets a real value, since only burst spends real money.
+backend:
+  replicas: 1
+  mode: replay
+  modelProvider: ollama
+  modelId: "qwen2.5:7b"
+  ollamaBaseUrl: "http://host.docker.internal:11434"
+  retriever: pgvector
+  checkpointer: postgres
+  # SP4 final fix wave (F2) parity: opt in producer for the ladder's provider_fallback rung,
+  # shape 'provider:model_id' (server.py _fallback_gateway). Empty keeps the rung absent, the
+  # same contract as compose's ATLAS_FALLBACK_MODEL passthrough; an environment that sets it
+  # must also have that provider's SDK group in the backend image.
+  fallbackModel: ""
+
+# Task 4 (D35, HLD section 4.9): the Traefik rate limit Middleware's average/burst (requests per
+# second per source), shared across both tiers -- burst enforces it for real, k3d exercises the same
+# YAML at low stakes (SP5 digest section 5's own framing for "one set of charts" applied to the edge
+# posture, not only the workload charts).
+ingress:
+  rateLimit:
+    average: 20
+    burst: 40
+
+# Task 5 (D3): the wildcard cert story. False here (k3d has no cert-manager operator installed --
+# infra/tofu/cluster is the burst only mechanism that installs it); environments/burst/values.yaml is
+# the only place this flips true, alongside the real (env templated) domain and token references.
+certManager:
+  enabled: false
+
+# SP6 task 3: the SAME two digests docker-compose.yml's own `observability` profile pins (parity),
+# parked here for whichever later task claims the SP5 reserved helmfile slot and writes the actual
+# otel-collector/phoenix chart content (Task 5, per the SP5 digest's own open decision 11 and this
+# plan's Global Constraints -- "helm: the same two releases claiming nothing yet from the SP5
+# reserved slot"). No chart consumes this block yet; testing/tests/test_observability_values.py
+# holds it to the exact same digests docker-compose.yml pins, and to D37's digest shape, without
+# rendering anything (there is nothing to render until Task 5 lands the chart).
+observability:
+  otelCollector:
+    image:
+      repository: otel/opentelemetry-collector-contrib
+      digest: sha256:89107a3a8f4636a396927edf7025bb9614b8da2d92f4cc3f43109e8d115736e2 # 0.135.0
+  phoenix:
+    image:
+      repository: arizephoenix/phoenix
+      digest: sha256:e90f05fc04d7507a948128ddd701d89ad1816a1b6fcccfb9feebd0f77d5e86a3 # version-19.2.0

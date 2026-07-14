@@ -1,0 +1,11 @@
+apiVersion: v2
+name: atlas-backend
+description: >-
+  SP5 task 4: docker-compose.yml's own "backend" service, translated to a Deployment + Service (D3:
+  compose parity is the acceptance bar tasks 2-4 already hold themselves to). Same image
+  (backend/Dockerfile, built read only, unmodified), same env var names/defaults, the same /healthz
+  contract. ATLAS_PG_DSN is assembled from the CNPG credentials Secret (the same shell wrapper
+  pattern atlas-jobs already established); ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL are gated by
+  .Values.tei.mode (the Task 3 adjudication's own inherited requirement for this task): the external
+  passthrough URL on local, or the in cluster tei-embed/tei-rerank Services on burst.
+version: 0.1.0

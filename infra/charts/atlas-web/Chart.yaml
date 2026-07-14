@@ -1,0 +1,8 @@
+apiVersion: v2
+name: atlas-web
+description: >-
+  SP5 task 4: docker-compose.yml's own "web" service (frontend/Dockerfile's nginx served SPA,
+  unmodified), translated to a Deployment + Service. No runtime config: the built SPA is static and
+  nginx.conf's only dependency is the "backend" Service name (atlas-backend's own service.yaml)
+  resolving via cluster DNS, exactly as it already resolves compose's own "backend" service name.
+version: 0.1.0

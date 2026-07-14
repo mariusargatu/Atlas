@@ -1,0 +1,21 @@
+# SP6 task 5: joins the committed infra/observability/otel-collector.yaml (D13's redacting
+# collector config, generated and drift gated by contract_tools.redaction) into the otel-collector
+# release's own ConfigMap (infra/charts/otel-collector/templates/configmap.yaml), via helmfile's own
+# readFile templating -- this file (the .gotmpl extension is what tells helmfile to actually
+# template it with Sprig's function set, readFile included, unlike a chart's own internal
+# values.yaml, which Helm reads as plain literal YAML) reaches the raw source file's bytes at
+# render time with zero network and zero duplication: a regenerate of the source file reaches this
+# ConfigMap on the very next render, never a second hand maintained copy to let drift.
+#
+# readFile's own path is relative to THIS FILE's own directory (infra/environments/base/, found
+# live: a path relative to the process CWD helmfile is invoked from failed closed with "no such
+# file or directory" instead), so the ../../ below climbs back to infra/ before descending into
+# observability/ -- Sprig's readFile (unlike Helm's chart relative .Files.Get) is a plain
+# os.ReadFile, but helmfile itself resolves relative values file paths (and, it turns out, the
+# paths passed to Sprig functions INSIDE a templated values file) against that file's own location.
+#
+# Every literal double curly brace pair below this point is a REAL template expression (this whole
+# file is templated), so this comment block deliberately never writes one out as prose -- see the
+# one working expression at the bottom instead of an inline example here.
+otelCollectorConfig: |
+{{ readFile "../../observability/otel-collector.yaml" | indent 2 }}

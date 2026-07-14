@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "reason": "The actual outcome directly matches the task: the system switched to the fast plan (plan_id: plan_current_fast) and returned the expected reference (ref-000001).",
+    "verdict": 1.0
+  },
+  "provenance": {
+    "deepeval": "4.0.9",
+    "judge": "openai:gpt-5.4-nano",
+    "model": "gpt-5.4-nano"
+  }
+}

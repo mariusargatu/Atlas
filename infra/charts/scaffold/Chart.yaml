@@ -1,0 +1,7 @@
+apiVersion: v2
+name: scaffold
+description: >-
+  SP5 task 1 scaffold chart: the atlas namespace every later release deploys into, plus the fake
+  local postgres credential that proves the SOPS + helmfile mechanism end to end. Tasks 2-4 add the
+  real CNPG/TEI/backend/web releases into this same namespace; this chart is not replaced by them.
+version: 0.1.0

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: cnpg-cluster
+description: >-
+  SP5 task 2: the ImageCatalog pointing at the custom pgvector image (digest shaped, D37) and the
+  Cluster CR itself (D1: instances=1, no pooler, HA explicitly refused). A small, locally authored
+  chart rather than the much larger upstream cnpg/cluster chart (backups, poolers, timescale,
+  multi tier storage): this project's D1 scope needs none of that, and hand writing the handful of
+  fields it does need keeps the digest shaped image reference and the credentials secret name in
+  our own values, not buried in an upstream chart's schema.
+version: 0.1.0

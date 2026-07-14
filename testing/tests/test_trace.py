@@ -6,13 +6,15 @@ what trajectory, simulation, security, and production assertions read from.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from langchain_core.messages import HumanMessage
 
 from determinism.checkpointer import new_checkpointer
 from determinism.sources import IdFactory
 from replay.gateway import GatewayChatModel
-from tracing import InMemoryTracer
+from tracing import InMemoryTracer, Span, retrieved_doc_ids
 
 from atlas.domain.actions import ActionsBackend
 from atlas.orchestration.atlas_graph import build_atlas_graph
@@ -99,3 +101,72 @@ async def test_spans_are_ordered_by_sequence_not_clock(tmp_path, seed_cassette):
 
     seqs = [s.seq for s in tracer.spans]
     assert seqs == sorted(seqs)  # monotonic, deterministic order, never time keyed
+
+
+# ---- retrieved_doc_ids: the sole producer of GradeContext.retrieved_doc_ids ----
+#
+# Built directly from `Span` objects, no graph run needed: this decoder reads only `span.name` and
+# `span.attributes["result"]`, the exact shape the real `search_knowledge` tool span carries, so a
+# hand built span is byte equivalent to a recorded one for this function's purposes. Before this
+# module, nothing ever called `retrieved_doc_ids` outside of `runner.run_case`; a rename of the span
+# name or the `result` attribute would have turned `RetrievalIdsRecalledGrader` into an unconditional
+# FAIL with no test going red.
+
+
+def _search_span(seq: int, result: object, *, name: str = "search_knowledge") -> Span:
+    return Span(seq=seq, name=name, kind="tool", parent=None, attributes={"result": result})
+
+
+def test_retrieved_doc_ids_reads_the_bare_passages_array_payload():
+    """The happy path payload shape: a bare JSON array of passages, no wrapper object."""
+    payload = json.dumps([{"chunk_id": "a"}, {"chunk_id": "b"}])
+    assert retrieved_doc_ids((_search_span(0, payload),)) == ("a", "b")
+
+
+def test_retrieved_doc_ids_reads_the_degraded_wrapper_payload():
+    """The degradation ladder wraps the same passages array in {atlas_degraded, degradation_mode,
+    passages}; the decoder must reach into it, not just the bare array shape."""
+    payload = json.dumps(
+        {"atlas_degraded": True, "degradation_mode": "reranker_down", "passages": [{"chunk_id": "x"}, {"chunk_id": "y"}]}
+    )
+    assert retrieved_doc_ids((_search_span(0, payload),)) == ("x", "y")
+
+
+def test_retrieved_doc_ids_dedupes_first_seen_order_preserved():
+    """Two search_knowledge spans (e.g. a re-query mid turn) whose passages overlap: the union is
+    de-duplicated, and the surviving order is first-seen, never sorted or last-seen."""
+    first = json.dumps([{"chunk_id": "a"}, {"chunk_id": "b"}])
+    second = json.dumps([{"chunk_id": "b"}, {"chunk_id": "c"}, {"chunk_id": "a"}])
+    spans = (_search_span(0, first), _search_span(1, second))
+    assert retrieved_doc_ids(spans) == ("a", "b", "c")
+
+
+def test_retrieved_doc_ids_skips_a_non_search_knowledge_span():
+    """A tool span from any other tool (e.g. the account tool) must never contribute ids, even if its
+    `result` happens to parse as the same shape."""
+    payload = json.dumps([{"chunk_id": "a"}])
+    assert retrieved_doc_ids((_search_span(0, payload, name="get_account_summary"),)) == ()
+
+
+def test_retrieved_doc_ids_skips_a_non_string_result():
+    """`result` recorded as a non-string (e.g. a dict, if a future caller stops serializing to JSON
+    text) must be silently skipped, never raise."""
+    assert retrieved_doc_ids((_search_span(0, {"passages": [{"chunk_id": "a"}]}),)) == ()
+
+
+def test_retrieved_doc_ids_skips_a_malformed_non_json_result():
+    """A `result` string that fails to parse as JSON at all must be silently skipped, never raise."""
+    assert retrieved_doc_ids((_search_span(0, "not json at all {"),)) == ()
+
+
+def test_retrieved_doc_ids_skips_when_passages_is_not_a_list():
+    """A wrapper payload whose `passages` key is present but not a list (a malformed upstream
+    payload) must be silently skipped, never raise."""
+    payload = json.dumps({"passages": "not-a-list"})
+    assert retrieved_doc_ids((_search_span(0, payload),)) == ()
+
+
+def test_retrieved_doc_ids_is_empty_with_no_search_knowledge_span_at_all():
+    """No tool span present at all (e.g. a turn answered without retrieval) is a defined empty
+    result, not a crash -- the same convention the decoder's own docstring names."""
+    assert retrieved_doc_ids(()) == ()

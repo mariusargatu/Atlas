@@ -1,0 +1,23 @@
+{{- /* Cluster scoped (no namespace): a hostPath local to the node, only correct on a single node cluster,
+which this one is (k3d "atlas": one server, zero agents, per infra/scripts/k3d-up.sh). `path` is the
+SAME node path Task 2's raw hostPath volume already pointed at (`k3d cluster create --volume
+$(pwd)/indexes:/indexes@all`, unchanged) -- this PV only adds the proper indirection in front of it,
+it does not move the underlying mount.
+
+storageClassName "manual" (paired with the PVC's own explicit `volumeName` below) is the standard
+static provisioning pattern: it opts this PV out of the cluster's default dynamic StorageClass
+(k3d/k3s ships "local-path", verified live) so the PVC binds to exactly THIS PV, never a freshly,
+and emptily, dynamically provisioned one. */ -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: atlas-indexes-pv
+spec:
+  capacity:
+    storage: {{ .Values.indexes.storageSize | quote }}
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: {{ .Values.indexes.hostPath | quote }}
+    type: Directory

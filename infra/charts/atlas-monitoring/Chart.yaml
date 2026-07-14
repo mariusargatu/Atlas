@@ -1,0 +1,24 @@
+apiVersion: v2
+name: atlas-monitoring
+description: >-
+  SP6 task 5: claims the prometheus-operator/kube-prometheus stack helmfile release slot SP5
+  reserved (SP5 digest open decision 11: "reserve the helmfile release slot and namespace but leave
+  rule/dashboard content to SP6"). A hand authored, minimal chart, not a vendored copy of
+  prometheus-community/kube-prometheus-stack (that chart of charts bundles Grafana, node-exporter,
+  and kube-state-metrics, all explicitly disabled per D13/HLD 5.6, and its own CRD surface is
+  disproportionate to what this reference system needs); this is the same "vendor only the genuine
+  operator complexity, hand write the rest" split this repo already draws between
+  infra/charts/vendor/cloudnative-pg (vendored, a real reconciliation controller) and
+  infra/charts/cnpg-cluster (hand written, a plain CR instance). Ships a real Prometheus +
+  Alertmanager + Pushgateway (digest pinned, no operator CONTROLLER sitting behind them: PrometheusRule
+  CRD objects render and are committed here for the D29 rule set, but nothing in this release installs
+  the prometheus-operator itself, or a controller to reconcile PrometheusRule objects against a live
+  API server -- the SAME rule content also reaches the actually running Prometheus as a native rule
+  file, one source of truth, see templates/prometheus-configmap.yaml's own comment). C3 fix (SP6
+  final review): the ONE CRD type this chart's own PrometheusRule custom resource needs registered to
+  install at all (absent on a fresh cluster, which used to take the whole release down with it) is
+  now vendored, verbatim, in crds/ -- see that file's own header for the source and version; still no
+  controller, only the type. One Alertmanager webhook receiver (no other channels, D29), and the
+  sentinel probe CronJob (D29, corpus/registry/core.yaml pinned query classes,
+  testing/harness/sentinel/probe.py).
+version: 0.1.0

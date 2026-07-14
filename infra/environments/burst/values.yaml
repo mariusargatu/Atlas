@@ -1,0 +1,58 @@
+# Hetzner burst tier (D3: rare, public demos / the load lane / headline benchmarks; local numbers
+# are never quoted). Task 5 owns the tofu module, the wildcard cert, and the burst secrets.enc.yaml
+# (provider keys, DNS names). Task 1 only needs this environment to resolve on the same helmfile and
+# the same charts as local, with a values layer that differs, not a chart that differs.
+registry: registry.invalid/atlas # placeholder; deliberately NOT replaced by Task 5 (no real burst
+# registry yet, see infra/README.md's "What Task 5 deliberately does not do"; release.yml (SP6 task
+# 6) is the CI pipeline that builds, pushes, and joins real GHCR image digests into the release
+# manifest today, but it never writes into this file -- recording a real digest here, once a real
+# burst registry exists, is still unassigned, future work)
+imagePullPolicy: IfNotPresent
+
+# Placeholders only, same shape as environments/local/values.yaml's generated block (D3: "one set of
+# charts", a difference in values, not chart content) so cnpg-cluster and atlas-jobs render for
+# burst too. No secret backs a real deploy yet (Task 5); the render test asserts burst never
+# inherits local's real values, not that these particular placeholders are meaningful today.
+images:
+  postgresPgvector:
+    repository: registry.invalid/atlas/atlas-postgres-pgvector
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  backend:
+    repository: registry.invalid/atlas/atlas-backend
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  web:
+    repository: registry.invalid/atlas/atlas-web
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# k3d only mount shape (Task 2), unconditionally reused here so the chart still renders; this path
+# does NOT exist on a real Hetzner node. The burst indexes restore from R2 was never built by Task 5
+# (a real functional gap, named in infra/README.md's "What Task 5 deliberately does not do" and in
+# docs/runbooks/corpus-bump.skeleton.md, whose future, not yet assigned, sub project owns it); until
+# it exists, infra/scripts/burst-up.sh stops before any tofu invocation rather than let a real
+# `task burst:up` bring up a backend mounting a nonexistent path.
+indexes:
+  hostPath: /indexes/corpus-0.1.1-bge-m3-03f983e0
+  corpusDir: corpus-0.1.1-bge-m3-03f983e0
+
+# Task 4 (D35 seam): the ONE real per burst spend ceiling value, sourced into atlas-backend's own
+# Deployment env as ATLAS_BURST_SPEND_CEILING_USD (infra/charts/atlas-backend/templates/
+# deployment.yaml). A placeholder number (Task 5 tunes it against real burst economics); the point
+# proven now is that the value lives in this values file and reaches the Deployment's env, not what
+# the number itself should be. Nothing reads this env var yet (SP4/SP6's job).
+backend:
+  burstSpendCeilingUsd: 25
+
+# Task 5 (D3): the wildcard cert, burst only. Real DNS names templated from a variable, never
+# hardcoded here (the same reasoning .env.fastlane's ATLAS_TEI_EMBED_URL/ATLAS_TEI_RERANK_URL already
+# established for this repo: an operator specific, non secret value stays out of a committed file, an
+# unset variable resolves to an empty string at this layer -- not an error -- so the real fail closed
+# gate lives in infra/scripts/burst-up.sh, not here; see that script and infra/README.md's "Burst
+# DNS" section). cloudflareApiToken decrypts through the SAME SOPS + age mechanism (two recipients,
+# infra/.sops.yaml's existing creation_rules already cover this path) local's own secrets.enc.yaml
+# proves; environments/burst/secrets.enc.yaml is its own encrypted file, a placeholder token value
+# (obviously fake, never a real one committed) proving the round trip extends to burst too.
+certManager:
+  enabled: true
+  baseDomain: ref+envsubst://$ATLAS_BURST_DOMAIN
+  acmeEmail: ref+envsubst://$ATLAS_BURST_ACME_EMAIL
+  cloudflareApiToken: ref+sops://environments/burst/secrets.enc.yaml#/cloudflareApiToken

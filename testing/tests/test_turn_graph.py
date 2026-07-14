@@ -29,7 +29,7 @@ async def test_full_tool_calling_turn_replays_byte_stable(tmp_path, seed_cassett
 
     # the canonical tool result the MCP server produces for Daniel (legacy plan)
     tool_text = serialize_tool_result(
-        {"customer": "Daniel", "plan": "Value (legacy, discontinued)", "has_contract": True}
+        {"customer": "Daniel", "plan": "Fiber 100 Legacy", "has_contract": True}
     )
     ai_toolcall = AIMessage(content="", tool_calls=_TOOLCALL)
     tool_msg = ToolMessage(content=tool_text, tool_call_id="call-1", name="get_account_summary")

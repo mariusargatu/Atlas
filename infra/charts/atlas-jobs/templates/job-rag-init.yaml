@@ -1,0 +1,58 @@
+{{- /* Translated from docker-compose.yml's rag-init service: same backend image, same
+`rag_tools.ingest --load-existing` invocation against the committed indexes/ build, same idempotency
+guarantee (IF NOT EXISTS schema, ON CONFLICT DO NOTHING inserts). compose's `./indexes:/app/indexes:
+ro` bind mount became a raw hostPath volume in Task 2 (its own simplest correct translation, per the
+SP5 digest section 2); Task 3 replaces that hostPath with the proper PersistentVolume/
+PersistentVolumeClaim pair the digest actually designs (infra/charts/atlas-indexes), reached here via
+`persistentVolumeClaim.claimName` below -- the command/args and the mount PATH are unchanged, only
+the volume SOURCE changed. */ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: atlas-rag-init
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    # Fix round 1: see job-migrate.yaml's own comment on this same policy change.
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  # See job-migrate.yaml's own comment: a debugging window before the TTL controller reaps a
+  # successful Job, instead of "hook-succeeded" deleting it (and its logs) instantly.
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      name: atlas-rag-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: rag-init
+          image: "{{ .Values.images.backend.repository }}@{{ .Values.images.backend.digest }}"
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export ATLAS_PG_DSN="postgresql://${PGUSER}:${PGPASSWORD}@{{ .Values.postgres.host }}:5432/{{ .Values.postgres.database }}"
+              exec uv run --no-sync python -m rag_tools.ingest \
+                --load-existing /app/indexes/{{ .Values.indexes.corpusDir }} \
+                --postgres-dsn "${ATLAS_PG_DSN}"
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: password
+          volumeMounts:
+            - name: indexes
+              mountPath: /app/indexes/{{ .Values.indexes.corpusDir }}
+              readOnly: true
+      volumes:
+        - name: indexes
+          persistentVolumeClaim:
+            claimName: {{ .Values.indexes.pvcName | default "atlas-indexes-pvc" }}

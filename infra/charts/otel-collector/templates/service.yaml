@@ -1,0 +1,19 @@
+{{- /* Named literally "otel-collector": the committed infra/observability/otel-collector.yaml's own
+`receivers.otlp` binds 0.0.0.0, so nothing in that file needs to know its own Service name, but
+`server.py`'s own ATLAS_OTEL_ENDPOINT (atlas-backend's Deployment env, a later wiring task) will
+dial this DNS name in cluster, the same shape docker-compose.yml's own service name already gives. */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

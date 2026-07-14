@@ -1,0 +1,24 @@
+{{- /* k3s ships Traefik as its default ingress controller in both tiers (SP5 digest open decision
+6): no separate ingress controller release, only this IngressRoute plus the Middleware above against
+the instance k3s/kube-hetzner already runs. entryPoints: web (plain HTTP, port 80 in cluster, mapped
+to a host port by `k3d cluster create -p` locally, see infra/scripts/k3d-up.sh). Burst's own real DNS
+name and a websecure entrypoint behind cert-manager's wildcard cert belong to the next task that
+touches this chart, a named seam in atlas-cert/templates/certificate.yaml and infra/README.md's
+"What Task 5 deliberately does not do" list (D3: one set of charts, only the values, a Host()
+matcher, a TLS block, differ once burst DNS exists). */ -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: atlas-web
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: PathPrefix(`/`)
+      services:
+        - name: atlas-web
+          port: 80
+      middlewares:
+        - name: atlas-rate-limit

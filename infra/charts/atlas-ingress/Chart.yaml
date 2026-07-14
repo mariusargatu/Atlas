@@ -1,0 +1,9 @@
+apiVersion: v2
+name: atlas-ingress
+description: >-
+  SP5 task 4: the k3s built in Traefik IngressRoute plus the D35 rate limit Middleware (HLD section
+  4.9), against the SAME Traefik instance k3s/kube-hetzner already runs in both tiers (no separate
+  ingress controller release, SP5 digest open decision 6). The per session token/cost budget D35
+  also names is backend application code, named as a seam (ATLAS_BURST_SPEND_CEILING_USD,
+  atlas-backend's own Deployment env), not implemented here.
+version: 0.1.0

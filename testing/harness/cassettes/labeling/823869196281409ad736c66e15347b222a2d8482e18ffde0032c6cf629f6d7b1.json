@@ -3,7 +3,7 @@
   "request": {
     "messages": [
       {
-        "content": "Is my plan contract-free?",
+        "content": "Does my plan have a data cap?",
         "type": "human"
       },
       {
@@ -11,7 +11,7 @@
         "tool_calls": [
           {
             "args": {
-              "query": "plan contract-free minimum term early-termination fee"
+              "query": "plan data unlimited cap"
             },
             "id": "k1",
             "name": "search_knowledge"
@@ -20,7 +20,7 @@
         "type": "ai"
       },
       {
-        "content": "[{\"chunk_id\":\"plan-current-page\",\"doc_id\":\"plan-current-page\",\"score\":\"F:0.0\",\"text\":\"Our current Fast plan is contract-free, with no minimum term, you can cancel any time, and there is no early-termination fee. Data is unlimited.\"}]",
+        "content": "[{\"chunk_id\":\"plan-current-page\",\"doc_id\":\"plan-current-page\",\"score\":\"F:0.0\",\"text\":\"Our current plan is contract-free, with no minimum term, you can cancel any time, and there is no early-termination fee. Data is unlimited.\"}]",
         "name": "search_knowledge",
         "tool_call_id": "k1",
         "type": "tool"
@@ -29,7 +29,7 @@
     "model_id": "claude-test"
   },
   "response": {
-    "content": "Yes, your current plan is contract-free with no minimum term and no early-termination fee.",
+    "content": "No, your plan has unlimited data with no cap.",
     "tool_calls": []
   },
   "version": 1

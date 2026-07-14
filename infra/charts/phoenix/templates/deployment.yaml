@@ -1,0 +1,74 @@
+{{- /* docker-compose.yml's own phoenix service, translated 1:1: PHOENIX_SQL_DATABASE_URL assembled
+from the credentials Secret at container start, pointed at the "phoenix" database this chart's own
+db-init Job creates before this Deployment's first request lands (the Job runs as a
+pre-install/pre-upgrade hook, so `helmfile sync` already blocks on it). No PVC: Phoenix's OWN state
+lives in Postgres (SP6 digest design question 5), this Deployment itself is stateless.
+
+C2 fix (SP6 final review): the arizephoenix image ships no shell at all (`command: ["sh", "-c"]`
+crash loops with "exec: sh: executable file not found in $PATH" -- reproduced live on a fresh k3d
+cluster), so the previous shell wrapper's own comment ("Kubernetes has no native string
+interpolation across env vars") was wrong on the one thing that actually matters here: Kubernetes
+DOES have a native, shell free mechanism for exactly this, dependent environment variable
+expansion. `$(VAR)` inside a LATER env entry's own `value:` is expanded by the kubelet against an
+EARLIER entry in the SAME `env:` list, by name, in list order -- no shell, no container process
+substitution involved at all. `PGUSER`/`PGPASSWORD` are declared first for exactly that reason; no
+`command`/`args` override is needed either, since the image's own baked in entrypoint already runs
+the Phoenix server (compose's own service never overrides it, which is why compose works today).
+
+`enableServiceLinks: false` (C2 fix, second half, found live on a RESTART of this exact Deployment
+after its own Service already existed -- the first sync's own pod started scheduling before the
+Service object settled, so this never crash looped on the very first install, only afterward):
+Kubernetes' legacy Docker links compatibility feature auto injects one `<SVCNAME>_PORT`/
+`<SVCNAME>_SERVICE_HOST`/... env var per Service already running in the SAME namespace, for every
+pod that starts after that Service exists. This Service is named literally "phoenix" (this chart's
+own `service.yaml` comment explains why: `otel-collector`'s committed OTLP export target hardcodes
+that DNS name), so Kubernetes injects `PHOENIX_PORT=tcp://<ClusterIP>:6006` -- a URL shaped string
+that collides BY NAME with Phoenix's own `PHOENIX_PORT` config var, which its own `config.py`
+requires to be a bare integer. Phoenix's own process fails at IMPORT time reading it
+("ValueError: ... ensure PHOENIX_PORT ... integer format"), crash looping forever the moment the
+Service exists in cluster state, unrelated to the shell issue above and never seen by the render
+test (a purely live, restart order dependent failure). `enableServiceLinks: false` disables this
+whole legacy injection mechanism for this pod (the standard, documented Kubernetes escape hatch for
+exactly this class of app config/service name collision); this Deployment reaches every other
+Service it needs (`atlas-pg-rw`, its own credentials Secret) by explicit env vars or DNS, never by
+relying on the auto injected ones, so nothing here depends on the mechanism being disabled. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phoenix
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: phoenix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phoenix
+  template:
+    metadata:
+      labels:
+        app: phoenix
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: phoenix
+          image: "{{ .Values.observability.phoenix.image.repository }}@{{ .Values.observability.phoenix.image.digest }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecretName }}
+                  key: password
+            - name: PHOENIX_SQL_DATABASE_URL
+              value: "postgresql://$(PGUSER):$(PGPASSWORD)@{{ .Values.postgres.host }}:5432/phoenix"
+          ports:
+            - name: ui
+              containerPort: 6006
+            - name: otlp-grpc
+              containerPort: 4317
