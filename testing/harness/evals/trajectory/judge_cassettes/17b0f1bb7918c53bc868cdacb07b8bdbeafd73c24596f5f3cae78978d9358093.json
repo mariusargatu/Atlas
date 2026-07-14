@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "reason": "The desired task was to switch to the internal zero plan, but the actual outcome indicates that 'plan_internal_zero' is not an available plan, so the system did not perform the requested switch.",
+    "verdict": 0.0
+  },
+  "provenance": {
+    "deepeval": "4.0.9",
+    "judge": "openai:gpt-5.4-nano",
+    "model": "gpt-5.4-nano"
+  }
+}

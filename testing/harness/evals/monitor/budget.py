@@ -9,11 +9,23 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
+from atlas.domain.binding import KNOWLEDGE_TOOLS
+
 
 @dataclass(frozen=True)
 class Budget:
     max_tool_calls: int
     max_retrieval_rounds: int
+
+
+# The operator/sample default, single-sourced so the sample lanes (task monitor / task trajectory) and
+# the trajectory tests cannot drift on what "within budget" means.
+DEFAULT_BUDGET = Budget(max_tool_calls=6, max_retrieval_rounds=3)
+
+# The retrieval tool set for budgeting, DEFAULT_BUDGET's companion: derived from the runtime binding
+# (KNOWLEDGE_TOOLS) and single-sourced so the sample lanes (task monitor / task trajectory) and the
+# budget tests cannot drift on what counts as a "retrieval round".
+DEFAULT_RETRIEVAL_TOOLS = frozenset(KNOWLEDGE_TOOLS)
 
 
 @dataclass(frozen=True)

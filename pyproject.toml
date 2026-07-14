@@ -82,6 +82,7 @@ omit = [
     "testing/harness/evals/redteam/*",                    # red-team lane (task redteam), live attack generation
     "testing/harness/evals/monitor/__main__.py",          # prod-monitoring sketch (task monitor); budget.py IS gated
     "testing/harness/evals/mutation/__main__.py",          # live semantic-mutation lane (task mutation); mutants.py IS gated
+    "testing/harness/evals/trajectory/__main__.py",        # DeepEval agentic lane (task trajectory); the grading modules ARE gated
     "testing/harness/evals/metamorphic/*",                # metamorphic augmentation lane (task metamorphic); the frozen family IS gated
     "backend/atlas/server.py",                   # ASGI entrypoint, exercised by the Playwright lane
     "backend/atlas/adapters/neo4j_graph.py",     # live Neo4j graph adapter, operator/dev-prod only (no in-process Cypher)

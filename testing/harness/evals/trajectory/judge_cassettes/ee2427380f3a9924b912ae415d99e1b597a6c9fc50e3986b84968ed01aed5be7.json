@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "outcome": "The system responded that the requested plan 'plan_internal_zero' is not a real, offered plan.",
+    "task": "Switch the system to the internal zero plan."
+  },
+  "provenance": {
+    "deepeval": "4.0.9",
+    "judge": "openai:gpt-5.4-nano",
+    "model": "gpt-5.4-nano"
+  }
+}

@@ -7,11 +7,8 @@ production failures into golden rows the gate replays. Non-gating; runnable with
 from __future__ import annotations
 
 from atlas.domain.poison_corpus import canary_tokens
-from evals.monitor.budget import Budget, check_budget
+from evals.monitor.budget import DEFAULT_BUDGET, DEFAULT_RETRIEVAL_TOOLS, check_budget
 from evals.retrieval.injection import Trajectory, detect_breach
-
-RETRIEVAL_TOOLS = frozenset({"search_knowledge"})
-BUDGET = Budget(max_tool_calls=6, max_retrieval_rounds=3)
 
 # A window of "live" turns (in production these come from sampled traces, not a fixture).
 SAMPLE_TRAJECTORIES = [
@@ -24,7 +21,7 @@ SAMPLE_TRAJECTORIES = [
 
 def main() -> None:
     within = sum(
-        check_budget(t.tools_called, BUDGET, retrieval_tools=RETRIEVAL_TOOLS).ok
+        check_budget(t.tools_called, DEFAULT_BUDGET, retrieval_tools=DEFAULT_RETRIEVAL_TOOLS).ok
         for t in SAMPLE_TRAJECTORIES
     )
     # Over UNLABELLED sampled traffic a read-surface breach is detectable only by an emitted canary:

@@ -7,9 +7,9 @@ number trended live is the operator lane's job.
 """
 from __future__ import annotations
 
-from evals.monitor.budget import Budget, check_budget
+from evals.monitor.budget import DEFAULT_RETRIEVAL_TOOLS, Budget, check_budget
 
-RETRIEVAL_TOOLS = frozenset({"search_knowledge"})
+RETRIEVAL_TOOLS = DEFAULT_RETRIEVAL_TOOLS  # single home for the budgeting retrieval set (budget.py)
 
 
 def test_a_healthy_turn_stays_within_budget():

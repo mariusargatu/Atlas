@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "outcome": "The system switched to the fast plan (plan_id: plan_current_fast) and returned the reference ref-000001.",
+    "task": "Switch the system to the fast plan."
+  },
+  "provenance": {
+    "deepeval": "4.0.9",
+    "judge": "openai:gpt-5.4-nano",
+    "model": "gpt-5.4-nano"
+  }
+}

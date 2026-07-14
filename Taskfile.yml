@@ -9,6 +9,7 @@ env:
   PYTHONHASHSEED: '0'
   OMP_NUM_THREADS: '1'
   PYTHONPATH: backend:testing/harness:.
+  DEEPEVAL_TELEMETRY_OPT_OUT: 'YES'   # deepeval phones home on every measure(); no lane may egress telemetry
 
 tasks:
   install:
@@ -110,6 +111,22 @@ tasks:
     desc: "metamorphic augmentation lane: show the frozen paraphrase family + the guard invariant, then hand off to an LLM to propose new paraphrases to review, freeze, and replay."
     cmds:
       - PYTHONPATH=backend:testing/harness:. uv run python -m evals.metamorphic
+
+  trajectory:
+    desc: "agent-trajectory lane (deterministic): grade the trajectory over a REAL replayed atlas_graph run (no keys, no egress). The judged agentic view is `task trajectory-judge`."
+    cmds:
+      - PYTHONPATH=backend:testing/harness:. uv run python -m evals.trajectory
+
+  trajectory-judge:
+    desc: "agent-trajectory JUDGED view (operator, non-gating): the replayed run graded by DeepEval ToolCorrectness (deterministic) + TaskCompletion, REPLAYING a frozen live judge verdict (deterministic, no egress). Capture/refresh it with `task trajectory-record`."
+    cmds:
+      - uv run --group rageval python -m evals.trajectory --judge
+
+  trajectory-record:
+    desc: "capture LIVE TaskCompletion verdicts (Ollama if up, else OpenAI) over the replayed runs and FREEZE them to replayable cassettes. Needs the rageval group + a judge; loads .env if present (the Ollama path needs no key). Run once; then `task trajectory-judge` replays with no egress."
+    dotenv: ['.env']
+    cmds:
+      - uv run --group rageval python -m evals.trajectory --record
 
   redteam:
     desc: "red team lane (OWASP/ATLAS): re-verifies the poison corpus invariant, hands off to DeepTeam for live generation when the redteam group is installed. Non-gating."

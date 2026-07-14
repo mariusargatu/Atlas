@@ -12,6 +12,8 @@ uv.lock.tmp
 # tool / session artifacts (never part of the repo)
 .playwright-mcp/
 .mutmut-cache
+# DeepEval telemetry/cache written by the judged operator lane (task trajectory-record / rageval)
+.deepeval/
 /*.png        # stray root screenshots from local verification runs
 
 # frontend (frontend)

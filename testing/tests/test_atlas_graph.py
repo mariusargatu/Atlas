@@ -201,7 +201,9 @@ async def test_act_path_materializes_the_proposal_through_the_actions_server(tmp
 @pytest.mark.asyncio
 async def test_act_path_value_bounds_fail_closed(tmp_path, seed_cassette):
     backend = ActionsBackend(IdFactory("ref"))
-    user = HumanMessage("Move me to the internal zero plan")
+    # an ACTION phrasing so routing reaches the value-bounds gate; a non-action phrasing would be
+    # stopped earlier by binding (change_plan unreachable), testing the wrong guard.
+    user = HumanMessage("Change my plan to the internal zero plan")
     seed_cassette(tmp_path, [user], {"content": "", "tool_calls": [{"name": "change_plan", "args": {"plan_id": "plan_internal_zero"}, "id": "c2"}]})
     graph = _graph(tmp_path, backend)
     out = await graph.ainvoke(
@@ -209,6 +211,7 @@ async def test_act_path_value_bounds_fail_closed(tmp_path, seed_cassette):
         {"configurable": {"thread_id": "act2"}},
     )
     assert out["final_response"].startswith("[safe handoff]")
+    assert "not a real, offered plan" in out["final_response"]  # the VALUE-BOUNDS rejection, not binding
     assert backend.change_count("cust_current") == 0  # never executed
 
 
