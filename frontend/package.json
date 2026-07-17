@@ -19,7 +19,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.7.91",
+    "@assistant-ui/react": "^0.14.27",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",
     "clsx": "^2.1.1",
