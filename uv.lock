@@ -262,7 +262,7 @@ dev = [
 graph = [
     { name = "neo4j", specifier = ">=5.17,<7" },
     { name = "neo4j-graphrag", extras = ["experimental", "ollama"], specifier = ">=1.18" },
-    { name = "testcontainers", extras = ["neo4j"], specifier = ">=4.14" },
+    { name = "testcontainers", extras = ["neo4j"], specifier = ">=4.14.2" },
 ]
 ollama = [{ name = "langchain-ollama", specifier = ">=0.2" }]
 rageval = [{ name = "deepeval", specifier = "==4.0.9" }]
