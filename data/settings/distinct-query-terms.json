@@ -1,0 +1,5 @@
+{
+  "sparse": {
+    "query_term_frequency": "distinct"
+  }
+}

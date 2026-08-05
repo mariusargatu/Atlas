@@ -1,0 +1,7 @@
+{
+  "chunk": {
+    "strategy": "fixed",
+    "max_tokens": 512,
+    "overlap_tokens": 64
+  }
+}

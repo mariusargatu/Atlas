@@ -1,0 +1,6 @@
+{
+  "embedding": {
+    "model_name": "text-embedding-3-large",
+    "size": 3072
+  }
+}
