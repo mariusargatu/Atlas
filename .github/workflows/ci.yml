@@ -1,0 +1,134 @@
+name: checks
+
+# Every job that runs the pipeline reaches a real embedding model, and the jobs that
+# generate or judge reach a real language model too. There is no keyless tier left to
+# put a check in: see docs/why-every-run-uses-real-models.md.
+#
+# The key names here are the ones the clients actually read. Three ATLAS_-prefixed
+# names sat here before and were read by nothing, so the jobs that claimed to spend
+# real money were running against no credentials at all.
+#
+# Fork pull requests cannot read repository secrets, so these jobs fail on a fork. That
+# is the acknowledged cost of running real models everywhere, recorded in the decision
+# record rather than worked around here.
+
+on:
+  push:
+  pull_request:
+
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  MODEL_PROVIDER: openai
+
+jobs:
+  lint-and-types:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: just lint
+      - run: just types
+
+  suite-integrity:
+    name: Suite integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: just test
+
+  properties:
+    name: Properties
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/pipeline/test_properties.py
+
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/pipeline/test_contracts.py
+
+  validity:
+    name: Validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/measurement/test_validity.py
+
+  core-relations:
+    name: Core relations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/pipeline/test_relations.py --durations=0
+
+  evaluation_numbers:
+    name: Evaluation numbers
+    runs-on: ubuntu-latest
+    # This carried `continue-on-error: true` and the comment "reports, never blocks:
+    # numbers with intervals, not a pass or fail". That was never true of the tests it
+    # runs. `suite-integrity` blocks, runs `just test`, and `testpaths = ["tests"]` picks
+    # up `tests/measurement/` along with everything else -- all 85 of the tests collected
+    # here are collected there too, under identical addopts. The soft tier had nothing in
+    # it, so a red result here already failed the build one job over, and three pages of
+    # documentation described a tier that did not exist.
+    #
+    # Resolved by admitting what happens rather than by carving the directory out of the
+    # blocking suite: these tests are deterministic against stubs, the ones that are not
+    # carry the `reporting` marker and are deselected by default, and a reader running
+    # `just test` should not silently skip the measurement half.
+    env:
+      DEEPEVAL_DISABLE_CACHE: "YES"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      # The whole directory, never a list of files. This job used to name four test
+      # files by hand, so a fifth measurement test joined the suite without joining this
+      # tier, and nothing anywhere would have said so. A directory cannot be forgotten.
+      - run: uv run pytest tests/measurement/
+
+  adversaries:
+    name: Adversaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/measurement/test_adversaries.py --hypothesis-profile checks
+
+  repo-contract:
+    name: Repo contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run pytest tests/meta/test_repo_contract.py -v
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    # Blocking on a regression against the committed baseline, never on an absolute
+    # floor: scripts/coverage_delta.py and docs/test-coverage.md say why the second
+    # would be gamed and the first is a real, actionable check "nobody has to look" for.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: extractions/setup-just@v2
+      - run: uv run python3 scripts/coverage_delta.py

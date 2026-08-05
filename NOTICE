@@ -1,0 +1,48 @@
+# Third party content
+
+## tau2-bench banking knowledge domain
+
+`data/tau2/banking_knowledge/` is vendored from **tau2-bench** by Sierra Research,
+used under the MIT License.
+
+    Source:  https://github.com/sierra-research/tau2-bench
+    License: MIT, reproduced verbatim with its own copyright line in
+             data/tau2/LICENSE
+    Files:   717 tracked -- 698 knowledge documents, tasks.json (97
+             customer service tasks), db.json, and 17 prompt files
+
+The documents and the `required_documents` list on each task are reproduced
+unmodified. That list is what this repository uses as its retrieval gold set, which
+is the point of vendoring it: the correct answer to every question here was fixed by
+somebody outside this project, before this project ran. Nothing in `src/` or `evals/`
+edits these files, and no check regenerates them.
+
+`tasks_voice.json` is excluded from version control for size; nothing in this
+repository reads it.
+
+## Langfuse compose file
+
+`deploy/docker-compose.yml` is adapted from the compose file **Langfuse GmbH** publishes for
+running Langfuse yourself, used under the MIT License.
+
+    Source:  https://github.com/langfuse/langfuse
+    License: MIT, reproduced verbatim with its own copyright line in
+             deploy/LICENSE.langfuse
+
+Most of it is upstream's, verbatim: the six services, both YAML anchors and the bulk of the
+environment. The changes here are narrow and are about keeping it off the network -- four
+published ports removed, two bound to 127.0.0.1, a healthcheck added to langfuse-web, and
+the LANGFUSE_INIT_* values filled in with obviously fake development credentials.
+
+Copyright for the vendored tau2-bench content remains with the tau2-bench authors, and for
+the compose file with Langfuse GmbH. Everything else in this repository is covered by the
+MIT License in `LICENSE`.
+
+Naming the holders here is not on its own enough, which is why the two files above exist.
+The MIT License requires that "the above copyright notice and this permission notice"
+travel with any substantial portion of the software, and a prose sentence in a NOTICE is
+neither of those things: it names a holder without reproducing the grant or the warranty
+disclaimer either of them made. It also does not survive the reading that matters, which
+is a machine's -- with one unscoped `LICENSE` at the root and nothing beside the vendored
+trees, GitHub's sidebar and the usual scanners resolve all 717 tau2 files and the compose
+file to this repository's own copyright line.

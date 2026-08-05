@@ -1,0 +1,71 @@
+# Python and tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+.hypothesis/
+.deepeval/
+.coverage
+coverage.xml
+coverage.json
+htmlcov/
+
+# Everything under .cache/ is derived and rebuildable, so the directory is ignored
+# rather than the two subdirectories inside it. Naming `vectors/` and `report/`
+# individually meant a third cache -- and there will be a third cache -- arrived as
+# untracked noise in everyone's `git status` until somebody thought to add a line.
+.cache/
+
+# Generated corpora. The tau2 corpus under data/tau2/ is vendored and tracked; this is
+# for anything a CollectionSource of your own writes out.
+data/corpus/
+
+# Secrets. Never commit.
+.env
+.env.*
+!.env.example
+
+# tau2-bench vendored data (MIT, sierra-research/tau2-bench) - large task files
+data/tau2/banking_knowledge/tasks_voice.json
+
+# Build artefacts. A copy of src/atlas under another name is a second source of
+# truth that nothing imports and that drifts silently; it was committed by accident.
+build/
+dist/
+
+# Editor and agent state. Local to whoever is working, never to the repository.
+# .claude/ was covered only by .git/info/exclude, which lives inside one clone and
+# reaches nobody who clones this: every contributor would have seen it as untracked.
+.claude/
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS. This repository is written on darwin, so these appear in every directory
+# somebody opens in Finder, and a public repo collects them from contributors too.
+.DS_Store
+._*
+
+# NOT ignored, deliberately, and listed here so nobody adds them by reflex:
+#
+#   data/results/runs.jsonl   every recorded run, one line each. Committed so a reader
+#                             with no API key can print any table with
+#                             `just report --render`, and so a change to a published
+#                             number shows up in a diff.
+#   data/labels.jsonl         human verdicts. Small, and the point of them is provenance.
+#   data/noise_floor.json     the judge's disagreement with itself, from
+#                             `just noise-floor`. Committed for the same reason
+#                             runs.jsonl is: every judge relation in
+#                             tests/measurement/test_judge.py is a multiple of it, and
+#                             a threshold whose basis is not in the repository is a
+#                             number somebody remembers.
+#   data/coverage_baseline.json   one committed percentage, what scripts/coverage_delta.py
+#                             compares a run against to catch a coverage regression. See
+#                             docs/test-coverage.md for why this is a regression check and
+#                             never an absolute floor.
+#   uv.lock                   1403 hashed pins. Ignoring it would make the README's
+#                             install path unreproducible.

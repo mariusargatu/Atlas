@@ -1,0 +1,99 @@
+[project]
+name = "atlas"
+version = "0.1.0"
+description = "Eval driven architecture: a RAG support pipeline that is measurable by construction."
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "tiktoken>=0.7",
+    "onnxruntime>=1.28.0",
+    "tokenizers>=0.23.1",
+    "huggingface-hub",
+    "jinja2>=3.1.6",
+    "langfuse>=4.14.2",
+    "deepeval==4.1.4",
+    "anthropic>=0.120.2",
+    # Both were imported while resolving only through deepeval and langfuse. A
+    # transitive dependency is not a promise: the day either drops it,
+    # atlas.models.providers and every script stop importing, for a reason nothing in
+    # this file explains.
+    "openai>=2.0",
+    "python-dotenv>=1.0",
+]
+
+# Below `dependencies`, not above it. `[project.urls]` is a table header, so every key
+# after it belongs to that table -- putting it under `requires-python` silently moved
+# `dependencies` into it and the project would have declared none.
+[project.urls]
+Homepage = "https://github.com/mariusargatu/Atlas"
+Source = "https://github.com/mariusargatu/Atlas"
+Issues = "https://github.com/mariusargatu/Atlas/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-randomly>=3.15",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-pyyaml>=6.0.12.20260724",
+    "pytest-env>=1.7.0",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+# The second -W wins: Python's warnings filters check the most recently added entry
+# first, and pytest applies -W flags in the order given, so this ignore sits ahead of
+# the blanket error for the one pytest-asyncio warning below. pytest-asyncio is pulled
+# in transitively by deepeval and warns once about an ini option nothing here reads.
+# -W is process wide, so a nested in-process pytest run (tests/test_no_skip_guard.py's
+# own pytester cases) inherits it too and would otherwise fail on a warning that names
+# no real defect. filterwarnings was tried first and rejected: -W error still wins over
+# it regardless of list order, and removing -W error breaks the scaffolding test that
+# reads the pythonwarnings option directly.
+addopts = "-p no:randomly --strict-markers -W error -W ignore::pytest.PytestDeprecationWarning:pytest_asyncio.plugin -W ignore::DeprecationWarning:huggingface_hub.file_download --hypothesis-profile checks -m 'not reporting'"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+markers = [
+    # Selected by nothing today, which is the honest description and was not the one here
+    # before: this said "its own CI job only", and .github/workflows/ci.yml has never had
+    # such a job. The addopts line above deselects the marker, every CI job inherits that
+    # line, and no job passes `-m reporting` to undo it -- so the five judge relations it
+    # guards run nowhere, and would fail if they did, because they need a recorded noise
+    # floor that data/noise_floor.json does not hold. See docs/how-we-test.md.
+    "reporting: spends real money and needs a recorded noise floor; deselected by default and selected by no CI job yet",
+]
+env = [
+    "DEEPEVAL_DISABLE_CACHE=YES",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+
+# There were three E402 exemptions here, for entry points that set sys.path and loaded
+# .env before importing atlas. The justfile does both now, once, for every recipe, so no
+# script has statements above its imports and none of them needs the exemption. One of
+# the three named scripts/estimate_model_cost.py, which does not exist: an exemption for
+# a deleted file is silent forever, which is why they are gone rather than trimmed.
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "PGH"]
+
+[tool.mypy]
+strict = false
+
+[[tool.mypy.overrides]]
+module = "atlas.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "evals.*"
+strict = false
+
+[[tool.mypy.overrides]]
+module = ["deepeval.*", "langfuse.*", "onnxruntime.*"]
+ignore_missing_imports = true
